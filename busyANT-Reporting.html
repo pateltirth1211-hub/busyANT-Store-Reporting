@@ -772,7 +772,11 @@ document.getElementById('chooseSales').onclick=()=>{ closeModal('addModal'); ope
 document.getElementById('chooseExpense').onclick=()=>{ closeModal('addModal'); openExpenseEntry(null); };
 
 /* ========= SALES ENTRY SHEET ========= */
-function sRefreshDate(){ document.getElementById('s_dateText').textContent=prettyDate(sEntryDate); document.getElementById('s_datePicker').value=sEntryDate; }
+function sRefreshDate(){
+  document.getElementById('s_dateText').textContent=prettyDate(sEntryDate);
+  const dp=document.getElementById('s_datePicker');
+  try{ dp.value = /^\d{4}-\d{2}-\d{2}$/.test(sEntryDate) ? sEntryDate : ''; }catch(e){ dp.value=''; }
+}
 function computeAvg(){ const tot=nval('s_total'),cust=nval('s_cust'); document.getElementById('s_avg').textContent=cust>0?money(tot/cust):'$0.00'; }
 ['s_total','s_cust'].forEach(id=>document.getElementById(id).addEventListener('input',computeAvg));
 const SF=['s_total','s_net','s_cust','s_items','s_cancels','s_returns','s_coupon','s_disc'];
@@ -810,14 +814,17 @@ document.getElementById('s_save').onclick=async function(){
     saved=true;
   }catch(err){ toast(err.message); btn.innerHTML=old; btn.disabled=false; return; }
   // If this save came from a scan, also persist the department rows
+  let deptMsg='';
   if(scannedDepartments && scannedDepartments.length){
-    try{ await api({action:'saveDepartments',date:sEntryDate,enteredBy:whoami,departments:scannedDepartments}); }
+    try{ const dr=await api({action:'saveDepartments',date:sEntryDate,enteredBy:whoami,departments:scannedDepartments});
+      deptMsg=' + '+(dr.count||scannedDepartments.length)+' depts';
+    }
     catch(e){ toast('Sales saved, but departments failed: '+e.message); }
     scannedDepartments=null;
   }
   // Save succeeded — confirm now. Refresh is best-effort and must not turn a success into an error.
   dataChanged=true;
-  wash('Saved','green'); dataChanged=true;
+  wash('Saved'+deptMsg,'green');
   try{ const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales); }
   catch(e){ /* refresh failed but save was fine; leave fields as entered */ btn.innerHTML='Update report'; }
   btn.disabled=false;
@@ -858,11 +865,25 @@ function resizeImage(file, maxDim){
     img.src=url;
   });
 }
+/* normalize any date-ish string the scanner returns into YYYY-MM-DD, or '' if unusable */
+function safeISO(s){
+  if(!s) return '';
+  s=String(s).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return m[1]+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[3]).padStart(2,'0');
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return m[3]+'-'+String(+m[1]).padStart(2,'0')+'-'+String(+m[2]).padStart(2,'0');
+  const d=new Date(s);
+  if(!isNaN(d.getTime())) return fmt(d);
+  return '';
+}
 /* fill the sales form from a scanned report, store departments for save */
 function applyScannedReport(rep){
   if(!rep){ toast('Nothing extracted'); return; }
-  // set date if the report had one
-  if(rep.date){ sEntryDate=rep.date; sRefreshDate(); }
+  // set date if the report had a usable one (sanitized so it can't break the date input)
+  const iso=safeISO(rep.date);
+  if(iso){ sEntryDate=iso; sRefreshDate(); }
   // unlock fields for review
   sLock(false);
   const set=(id,v)=>{ if(v!==null&&v!==undefined) document.getElementById(id).value=v; };
