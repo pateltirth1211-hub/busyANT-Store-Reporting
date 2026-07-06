@@ -473,7 +473,13 @@ document.getElementById('themeBtn').onclick=function(){
 };
 
 /* ========= WHO ========= */
-function refreshWho(){ document.getElementById('whoBtn').textContent = whoami? whoami.slice(0,2).toUpperCase() : '?'; }
+function initials(name){
+  if(!name) return '?';
+  const parts=name.trim().split(/\s+/);
+  if(parts.length>=2) return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+  return parts[0].slice(0,2).toUpperCase();
+}
+function refreshWho(){ document.getElementById('whoBtn').textContent = initials(whoami); }
 document.getElementById('whoBtn').onclick=function(){ if(confirm('Sign out'+(whoami?' '+whoami:'')+'?')) handleLogout(); };
 refreshWho();
 
