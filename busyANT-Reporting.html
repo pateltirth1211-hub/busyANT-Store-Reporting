@@ -218,6 +218,19 @@ details.more .field{background:transparent;padding:0;}
 .splash-logo{width:240px;max-width:70%;height:auto;}
 [data-theme="dark"] .splash-logo{filter:drop-shadow(0 0 30px rgba(239,159,39,0.15));}
 
+/* login screen */
+.login{position:fixed;inset:0;background:var(--bg);z-index:280;display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px;}
+.login.show{display:flex;}
+.login-logo{width:200px;max-width:60%;height:auto;margin-bottom:24px;}
+[data-theme="dark"] .login-logo{filter:drop-shadow(0 0 30px rgba(239,159,39,0.12));}
+.login-card{background:var(--card);border-radius:18px;padding:24px 20px;width:100%;max-width:340px;}
+.login-card h2{margin:0 0 16px;font-size:20px;font-weight:600;text-align:center;}
+.login-input{width:100%;height:46px;border:1px solid var(--border2);border-radius:12px;background:var(--card2);
+  color:var(--text);padding:0 14px;font-size:15px;outline:none;font-family:inherit;margin-bottom:12px;}
+.login-input:focus{border-color:var(--amber);}
+.login-err{color:var(--red);font-size:13px;text-align:center;margin:12px 0 0;min-height:16px;}
+
 /* header logo */
 .header-logo{height:34px;width:auto;flex:0 0 auto;}
 
@@ -260,6 +273,17 @@ details.more .field{background:transparent;padding:0;}
 <div class="splash" id="splash">
   <img src="logo-web.png" alt="busyANT Super Market" class="splash-logo">
   <span class="spinner-lg" style="margin-top:20px;"></span>
+</div>
+
+<div class="login" id="loginScreen">
+  <img src="logo-web.png" alt="busyANT" class="login-logo">
+  <div class="login-card">
+    <h2>Sign in</h2>
+    <input id="loginUser" class="login-input" placeholder="Username" autocomplete="username">
+    <input id="loginPass" class="login-input" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn btn-primary" id="loginBtn">Sign in</button>
+    <p class="login-err" id="loginErr"></p>
+  </div>
 </div>
 
 <div class="wrap">
@@ -405,12 +429,15 @@ function money(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFrac
 function money0(n){ return '$'+Math.round(Number(n||0)).toLocaleString(); }
 function nval(id){ const v=document.getElementById(id).value.replace(/[^0-9.\-]/g,''); return v===''?0:parseFloat(v); }
 
+let authToken = localStorage.getItem('authToken') || '';
 async function api(payload){
   const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),30000);
+  if(authToken && !payload.token) payload.token=authToken;
   try{
     const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal:ctl.signal});
     clearTimeout(t);
     const data=await r.json();
+    if(data && data.error==='auth'){ handleLogout(); throw new Error('Please sign in'); }
     if(!data.ok) throw new Error(data.error||'Request failed');
     return data;
   }catch(err){ clearTimeout(t); throw err; }
@@ -447,7 +474,7 @@ document.getElementById('themeBtn').onclick=function(){
 
 /* ========= WHO ========= */
 function refreshWho(){ document.getElementById('whoBtn').textContent = whoami? whoami.slice(0,2).toUpperCase() : '?'; }
-document.getElementById('whoBtn').onclick=function(){ const n=prompt('Your name (staff initials or name):', whoami||''); if(n!==null){ whoami=n.trim(); localStorage.setItem('who',whoami); refreshWho(); } };
+document.getElementById('whoBtn').onclick=function(){ if(confirm('Sign out'+(whoami?' '+whoami:'')+'?')) handleLogout(); };
 refreshWho();
 
 /* ========= TABS ========= */
@@ -826,11 +853,40 @@ document.getElementById('e_delete').onclick=async function(){
 
 function refreshActive(){ if(activeTab==='home') loadHome(); else if(activeTab==='sales') loadSalesList(); else loadExpenseList(); }
 
+/* ========= AUTH / LOGIN ========= */
+function showLogin(){ document.getElementById('loginScreen').classList.add('show'); hideSplash(); }
+function handleLogout(){ authToken=''; localStorage.removeItem('authToken'); showLogin(); }
+async function doLogin(){
+  const user=document.getElementById('loginUser').value.trim();
+  const pass=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginErr'); const btn=document.getElementById('loginBtn');
+  if(!user||!pass){ err.textContent='Enter username and password'; return; }
+  err.textContent=''; btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Signing in…';
+  try{
+    const r=await api({action:'login',username:user,password:pass});
+    authToken=r.token; localStorage.setItem('authToken',authToken);
+    if(r.name){ whoami=r.name; localStorage.setItem('who',whoami); refreshWho(); }
+    document.getElementById('loginScreen').classList.remove('show');
+    document.getElementById('loginPass').value='';
+    startApp();
+  }catch(e){ err.textContent=e.message||'Sign in failed'; }
+  finally{ btn.disabled=false; btn.textContent='Sign in'; }
+}
+document.getElementById('loginBtn').onclick=doLogin;
+document.getElementById('loginPass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+document.getElementById('loginUser').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('loginPass').focus(); });
+
 /* ========= INIT ========= */
 function hideSplash(){ const s=document.getElementById('splash'); if(s){ s.classList.add('gone'); setTimeout(()=>s.remove(),450); } }
-if(API_URL.indexOf('PASTE_')===0){ document.getElementById('view-home').innerHTML='<div class="empty-state">Set API_URL first</div>'; hideSplash(); }
-else{ loadHome().finally(()=>setTimeout(hideSplash,300)); }
-/* Safety: never let splash hang more than 6s */
+function startApp(){ loadHome().finally(()=>setTimeout(hideSplash,300)); }
+async function boot(){
+  if(API_URL.indexOf('PASTE_')===0){ document.getElementById('view-home').innerHTML='<div class="empty-state">Set API_URL first</div>'; hideSplash(); return; }
+  if(!authToken){ showLogin(); return; }
+  // verify existing token still works by loading home; if auth fails, api() triggers showLogin
+  try{ await api({action:'getDashboard',from:isoToday(),to:isoToday()}); startApp(); }
+  catch(e){ if(String(e.message).indexOf('sign in')>=0){ /* handled */ } else { showLogin(); } }
+}
+boot();
 setTimeout(hideSplash,6000);
 </script>
 </body>
