@@ -132,7 +132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 .lrow .rmeta{display:flex;align-items:center;gap:8px;margin-top:3px;}
 
 /* floating + */
-.fab{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;background:var(--amber);
+.fab{position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:18px;background:var(--amber);
   border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:60;
   box-shadow:0 6px 20px rgba(239,159,39,0.4);color:var(--amber-t);font-size:30px;}
 
@@ -208,6 +208,7 @@ details.more .field{background:transparent;padding:0;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .loadwrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:50px 0;}
 .loadwrap .m{font-size:14px;color:var(--text2);}
+.loadwrap .load-logo{width:150px;max-width:55%;height:auto;margin-bottom:4px;}
 .hide{display:none!important;}
 
 /* splash screen */
@@ -220,9 +221,24 @@ details.more .field{background:transparent;padding:0;}
 /* header logo */
 .header-logo{height:34px;width:auto;flex:0 0 auto;}
 
+/* day load overlay */
+.dayload{position:fixed;inset:0;background:rgba(14,20,32,.92);z-index:250;display:none;flex-direction:column;
+  align-items:center;justify-content:center;}
+.dayload.show{display:flex;}
+.dayload-logo{width:180px;max-width:60%;height:auto;}
+[data-theme="light"] .dayload{background:rgba(241,239,232,.94);}
+
+/* on-chart tooltip */
+.ichart .tip{position:absolute;transform:translateX(-50%);background:var(--card);border:0.5px solid var(--border2);
+  border-radius:10px;padding:7px 11px;pointer-events:none;white-space:nowrap;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.35);}
+.ichart .tip b{display:block;font-size:14px;font-weight:600;color:var(--text);}
+.ichart .tip small{font-size:11px;color:var(--text2);}
+.ichart .tip .vd{display:block;margin-top:3px;font-size:11px;color:var(--amber);font-weight:500;pointer-events:auto;cursor:pointer;}
+.ichart .vline{position:absolute;top:0;width:1px;background:var(--border2);pointer-events:none;}
+
 /* interactive chart */
-.ichart{position:relative;width:100%;margin:6px 0 4px;-webkit-tap-highlight-color:transparent;}
-.ichart svg{width:100%;height:auto;display:block;overflow:visible;}
+.ichart{position:relative;width:100%;height:110px;margin:6px 0 4px;-webkit-tap-highlight-color:transparent;}
+.ichart svg{width:100%;height:110px;display:block;overflow:visible;}
 .ichart .hit{fill:transparent;cursor:pointer;}
 .ichart .pt{fill:var(--amber);pointer-events:none;}
 .ichart .barhit{cursor:pointer;}
@@ -260,7 +276,7 @@ details.more .field{background:transparent;padding:0;}
     </div>
   </div>
 
-  <section id="view-home"><div class="loadwrap"><span class="spinner-lg"></span><span class="m">Loading…</span></div></section>
+  <section id="view-home"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></section>
   <section id="view-sales" class="hide"></section>
   <section id="view-expenses" class="hide"></section>
 </div>
@@ -338,6 +354,7 @@ details.more .field{background:transparent;padding:0;}
       <span data-type="one-time" class="on">One-time</span>
       <span data-type="recurring">Recurring monthly</span>
     </div>
+    <button class="btn btn-neutral" id="e_edit" style="display:none;margin-bottom:10px;">Edit</button>
     <button class="btn btn-primary" id="e_add">Add expense</button>
     <button class="btn btn-danger" id="e_delete" style="margin-top:10px;display:none;">Delete</button>
     <button class="btn btn-neutral" id="e_close" style="margin-top:10px;">Close</button>
@@ -346,6 +363,7 @@ details.more .field{background:transparent;padding:0;}
 
 <div class="wash" id="wash"><div class="check">✓</div><div class="msg" id="washMsg">Saved</div></div>
 <div class="toast" id="toast"></div>
+<div class="dayload" id="dayLoad"><img src="logo-web.png" alt="" class="dayload-logo"><span class="spinner-lg" style="margin-top:16px;"></span></div>
 
 <script>
 /* ========= CONFIG ========= */
@@ -363,6 +381,7 @@ let eEditing = null;             // expense being edited (or null = new)
 let selectedCat = null, selectedType = 'one-time';
 let salesRange = 'month', salesFrom=null, salesTo=null;
 let expRange = 'month', expFrom=null, expTo=null;
+let dataChanged=false;
 
 /* ========= HELPERS ========= */
 function isoToday(){ return fmt(new Date()); }
@@ -397,12 +416,14 @@ async function api(payload){
   }catch(err){ clearTimeout(t); throw err; }
 }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
-function wash(msg){ const w=document.getElementById('wash'); document.getElementById('washMsg').textContent=msg||'Saved'; w.classList.add('show'); setTimeout(()=>w.classList.remove('show'),1100); }
+function wash(msg,color){ const w=document.getElementById('wash'); document.getElementById('washMsg').textContent=msg||'Saved';
+  w.style.background = color==='green' ? 'var(--teal)' : 'var(--amber)';
+  w.classList.add('show'); setTimeout(()=>w.classList.remove('show'),1100); }
 
 /* range presets -> [from,to] */
 function rangeToDates(mode,cf,ct){
   const today=parseISO(isoToday()); const y=today.getFullYear(), m=today.getMonth();
-  if(mode==='week'){ const f=new Date(today); f.setDate(f.getDate()-today.getDay()); return [fmt(f),fmt(today)]; }
+  if(mode==='week'){ const f=new Date(today); const dow=(today.getDay()+6)%7; f.setDate(f.getDate()-dow); return [fmt(f),fmt(today)]; }
   if(mode==='7'){ const f=new Date(today); f.setDate(f.getDate()-6); return [fmt(f),fmt(today)]; }
   if(mode==='month'){ return [fmt(new Date(y,m,1)),fmt(today)]; }
   if(mode==='lastmonth'){ return [fmt(new Date(y,m-1,1)),fmt(new Date(y,m,0))]; }
@@ -474,15 +495,23 @@ function interactiveChart(mountId, data, type, onOpen){
   const idxs=[...new Set([0,Math.floor(n/2),n-1])];
   const axis='<div class="chartaxis">'+idxs.map(i=>'<span style="left:'+((xAt(i)/W)*100).toFixed(1)+'%;">'+parseISO(data[i].date).toLocaleDateString(undefined,{month:'numeric',day:'numeric'})+'</span>').join('')+'</div>';
 
-  mount.innerHTML='<div class="ichart">'+svg+'</div>'+axis+'<div class="readout blank" id="'+mountId+'_ro">Tap a point to see that day</div>';
+  mount.innerHTML='<div class="ichart" style="position:relative;">'+svg+'<div class="vline hide" id="'+mountId+'_vl"></div><div class="tip hide" id="'+mountId+'_tip"></div></div>'+axis;
 
+  const chartBox=mount.querySelector('.ichart');
   function select(i){
     const d=data[i];
-    const ro=document.getElementById(mountId+'_ro');
-    ro.className='readout';
-    ro.innerHTML='<div class="l"><b>'+money0(d.value)+'</b>'+shortDate(d.date)+(d.extra?' · '+d.extra:'')+'</div>'+
-      '<span class="link" data-open="'+d.date+'">View day ›</span>';
-    ro.querySelector('.link').onclick=()=>onOpen(d.date);
+    const tip=document.getElementById(mountId+'_tip');
+    const vl=document.getElementById(mountId+'_vl');
+    const xPct=(xAt(i)/W)*100;
+    const yPx=(yAt(d.value)/H); // fraction of svg height
+    const boxH=chartBox.clientHeight||90;
+    tip.className='tip';
+    tip.innerHTML='<b>'+money0(d.value)+'</b><small>'+shortDate(d.date)+(d.extra?' · '+d.extra:'')+'</small>'+
+      '<span class="vd" data-open="'+d.date+'">View day ›</span>';
+    tip.style.left=Math.max(14,Math.min(96,xPct))+'%';
+    tip.style.top=Math.max(2,(yPx*boxH)-58)+'px';
+    tip.querySelector('.vd').onclick=(ev)=>{ ev.stopPropagation(); onOpen(d.date); };
+    vl.className='vline'; vl.style.left=xPct+'%'; vl.style.height=boxH+'px';
     mount.querySelectorAll('.bar').forEach((b,bi)=>b.classList.toggle('sel',bi===i));
   }
   mount.querySelectorAll('.hit,.barhit').forEach(h=> h.onclick=()=>select(parseInt(h.dataset.i)));
@@ -569,7 +598,7 @@ function buildRanges(containerId,activeMode,onPick){
 async function loadSalesList(){
   const el=document.getElementById('view-sales');
   const [from,to]=rangeToDates(salesRange,salesFrom,salesTo);
-  el.innerHTML=buildRanges('salesRanges',salesRange)+(salesRange==='custom'?customRangeHtml('s',salesFrom,salesTo):'')+'<div class="loadwrap"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
+  el.innerHTML=buildRanges('salesRanges',salesRange)+(salesRange==='custom'?customRangeHtml('s',salesFrom,salesTo):'')+'<div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
   wireRanges('salesRanges',m=>{ salesRange=m; loadSalesList(); },'s');
   try{
     const r=await api({action:'listSales',from:from,to:to});
@@ -612,7 +641,7 @@ function drawSalesRows(){
 async function loadExpenseList(){
   const el=document.getElementById('view-expenses');
   const [from,to]=rangeToDates(expRange,expFrom,expTo);
-  el.innerHTML=buildRanges('expRanges',expRange)+(expRange==='custom'?customRangeHtml('e',expFrom,expTo):'')+'<div class="loadwrap"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
+  el.innerHTML=buildRanges('expRanges',expRange)+(expRange==='custom'?customRangeHtml('e',expFrom,expTo):'')+'<div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
   wireRanges('expRanges',m=>{ expRange=m; loadExpenseList(); },'e');
   try{
     const r=await api({action:'listExpenses',from:from,to:to});
@@ -702,25 +731,33 @@ function sFill(s){
   else{ status.innerHTML=''; sLock(false); edit.style.display='none'; save.style.display='block'; save.textContent='Save report'; }
 }
 async function openSalesEntry(date){
-  sEntryDate=date||isoToday(); sRefreshDate(); openModal('salesModal');
-  sFill(null); document.getElementById('s_status').innerHTML='<div class="statuspill" style="background:var(--card2);color:var(--text2);">Loading…</div>';
-  try{ const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales); }catch(err){ toast(err.message); sFill(null); }
+  sEntryDate=date||isoToday(); sRefreshDate();
+  document.getElementById('dayLoad').classList.add('show');
+  sFill(null);
+  try{ const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales); openModal('salesModal'); }
+  catch(err){ toast(err.message); sFill(null); openModal('salesModal'); }
+  finally{ document.getElementById('dayLoad').classList.remove('show'); }
 }
 document.getElementById('s_prev').onclick=()=>{ const d=parseISO(sEntryDate); d.setDate(d.getDate()-1); openSalesEntry(fmt(d)); };
 document.getElementById('s_next').onclick=()=>{ const d=parseISO(sEntryDate); d.setDate(d.getDate()+1); openSalesEntry(fmt(d)); };
 document.getElementById('s_datePicker').onchange=function(){ if(this.value) openSalesEntry(this.value); };
 document.getElementById('s_edit').onclick=function(){ sLock(false); this.style.display='none'; const save=document.getElementById('s_save'); save.style.display='block'; save.textContent='Update report'; document.getElementById('s_total').focus(); };
-document.getElementById('s_close').onclick=()=>{ closeModal('salesModal'); refreshActive(); };
+document.getElementById('s_close').onclick=()=>{ closeModal('salesModal'); if(dataChanged){ refreshActive(); dataChanged=false; } };
 document.getElementById('s_save').onclick=async function(){
   if(nval('s_total')<=0){ toast('Enter total sales first'); return; }
   const btn=this, old=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
+  let saved=false;
   try{
     await api({action:'saveDailySales',date:sEntryDate,enteredBy:whoami,totalSales:nval('s_total'),netSales:nval('s_net'),
       customers:nval('s_cust'),itemsSold:nval('s_items'),cancels:nval('s_cancels'),returns:nval('s_returns'),coupon:nval('s_coupon'),discounts:nval('s_disc')});
-    const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales);
-    wash('Report saved');
-  }catch(err){ toast(err.message); btn.innerHTML=old; }
-  finally{ btn.disabled=false; }
+    saved=true;
+  }catch(err){ toast(err.message); btn.innerHTML=old; btn.disabled=false; return; }
+  // Save succeeded — confirm now. Refresh is best-effort and must not turn a success into an error.
+  dataChanged=true;
+  wash('Saved','green'); dataChanged=true;
+  try{ const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales); }
+  catch(e){ /* refresh failed but save was fine; leave fields as entered */ btn.innerHTML='Update report'; }
+  btn.disabled=false;
 };
 
 /* ========= EXPENSE ENTRY SHEET ========= */
@@ -731,26 +768,39 @@ function buildCatPills(){
     el.onclick=()=>{ selectedCat=cat; c.querySelectorAll('.pill').forEach(p=>p.classList.toggle('on',p.textContent===cat)); }; c.appendChild(el); });
 }
 document.querySelectorAll('#e_type span').forEach(s=> s.onclick=()=>{ selectedType=s.dataset.type; document.querySelectorAll('#e_type span').forEach(x=>x.classList.toggle('on',x===s)); });
+function eSetLocked(locked){
+  document.getElementById('e_amount').readOnly=locked;
+  document.getElementById('e_vendor').readOnly=locked;
+  document.getElementById('e_catPills').style.pointerEvents=locked?'none':'auto';
+  document.getElementById('e_catPills').style.opacity=locked?'0.7':'1';
+  document.getElementById('e_type').style.pointerEvents=locked?'none':'auto';
+  document.getElementById('e_type').style.opacity=locked?'0.7':'1';
+  document.getElementById('e_edit').style.display=locked?'block':'none';
+  document.getElementById('e_add').style.display=locked?'none':'block';
+}
 function openExpenseEntry(item){
   eEditing=item;
   if(item){
     eEntryDate=item.date; selectedCat=item.category; selectedType=item.type||'one-time';
-    document.getElementById('expTitle').textContent='Edit expense';
+    document.getElementById('expTitle').textContent='Expense';
     document.getElementById('e_amount').value=item.amount; document.getElementById('e_vendor').value=item.vendor||'';
     document.getElementById('e_add').textContent='Save changes'; document.getElementById('e_delete').style.display='block';
+    eSetLocked(true);  // existing expense opens locked
   }else{
     eEntryDate=isoToday(); selectedCat=null; selectedType='one-time';
     document.getElementById('expTitle').textContent='Add expense';
     document.getElementById('e_amount').value=''; document.getElementById('e_vendor').value='';
     document.getElementById('e_add').textContent='Add expense'; document.getElementById('e_delete').style.display='none';
+    eSetLocked(false); // new expense is editable immediately
   }
   document.querySelectorAll('#e_type span').forEach(x=>x.classList.toggle('on',x.dataset.type===selectedType));
   eRefreshDate(); buildCatPills(); openModal('expModal');
 }
+document.getElementById('e_edit').onclick=function(){ eSetLocked(false); document.getElementById('e_amount').focus(); };
 document.getElementById('e_prev').onclick=()=>{ const d=parseISO(eEntryDate); d.setDate(d.getDate()-1); eEntryDate=fmt(d); eRefreshDate(); };
 document.getElementById('e_next').onclick=()=>{ const d=parseISO(eEntryDate); d.setDate(d.getDate()+1); eEntryDate=fmt(d); eRefreshDate(); };
 document.getElementById('e_datePicker').onchange=function(){ if(this.value){ eEntryDate=this.value; eRefreshDate(); } };
-document.getElementById('e_close').onclick=()=>{ closeModal('expModal'); refreshActive(); };
+document.getElementById('e_close').onclick=()=>{ closeModal('expModal'); if(dataChanged){ refreshActive(); dataChanged=false; } };
 document.getElementById('e_add').onclick=async function(){
   const amt=nval('e_amount');
   if(amt<=0){ toast('Enter an amount'); return; }
@@ -762,14 +812,14 @@ document.getElementById('e_add').onclick=async function(){
     }else{
       await api({action:'addExpense',date:eEntryDate,amount:amt,category:selectedCat,vendor:document.getElementById('e_vendor').value,type:selectedType,enteredBy:whoami});
     }
-    closeModal('expModal'); wash(eEditing?'Expense updated':'Expense added'); refreshActive();
+    closeModal('expModal'); wash(eEditing?'Updated':'Added','green'); dataChanged=true; refreshActive();
   }catch(err){ toast(err.message); btn.innerHTML=old; }
   finally{ btn.disabled=false; }
 };
 document.getElementById('e_delete').onclick=async function(){
   if(!eEditing||!confirm('Delete this expense?')) return;
   this.disabled=true;
-  try{ await api({action:'deleteExpense',id:eEditing.id}); closeModal('expModal'); wash('Deleted'); refreshActive(); }
+  try{ await api({action:'deleteExpense',id:eEditing.id}); closeModal('expModal'); wash('Deleted','green'); dataChanged=true; refreshActive(); }
   catch(err){ toast(err.message); }
   finally{ this.disabled=false; }
 };
