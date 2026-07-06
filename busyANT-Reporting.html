@@ -209,19 +209,38 @@ details.more .field{background:transparent;padding:0;}
 .loadwrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:50px 0;}
 .loadwrap .m{font-size:14px;color:var(--text2);}
 .hide{display:none!important;}
+
+/* splash screen */
+.splash{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;transition:opacity .4s;}
+.splash.gone{opacity:0;pointer-events:none;}
+.splash-logo{width:240px;max-width:70%;height:auto;}
+[data-theme="dark"] .splash-logo{filter:drop-shadow(0 0 30px rgba(239,159,39,0.15));}
+
+/* header logo */
+.header-logo{height:34px;width:auto;flex:0 0 auto;}
+
 </style>
 </head>
 <body>
 
+<div class="splash" id="splash">
+  <img src="logo-web.png" alt="busyANT Super Market" class="splash-logo">
+  <span class="spinner-lg" style="margin-top:20px;"></span>
+</div>
+
 <div class="wrap">
   <div class="topbar">
-    <button class="iconbtn" id="themeBtn" aria-label="Toggle theme"><i>☾</i></button>
+    <img src="logo-web.png" alt="busyANT" class="header-logo">
     <div class="tabbar">
       <button data-tab="home" class="on">Home</button>
       <button data-tab="sales">Sales</button>
       <button data-tab="expenses">Expenses</button>
     </div>
-    <button class="avatar" id="whoBtn" aria-label="Who are you">?</button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="iconbtn" id="themeBtn" aria-label="Toggle theme"><i>☾</i></button>
+      <button class="avatar" id="whoBtn" aria-label="Who are you">?</button>
+    </div>
   </div>
 
   <section id="view-home"><div class="loadwrap"><span class="spinner-lg"></span><span class="m">Loading…</span></div></section>
@@ -690,8 +709,11 @@ document.getElementById('e_delete').onclick=async function(){
 function refreshActive(){ if(activeTab==='home') loadHome(); else if(activeTab==='sales') loadSalesList(); else loadExpenseList(); }
 
 /* ========= INIT ========= */
-if(API_URL.indexOf('PASTE_')===0){ document.getElementById('view-home').innerHTML='<div class="empty-state">Set API_URL first</div>'; }
-else{ loadHome(); }
+function hideSplash(){ const s=document.getElementById('splash'); if(s){ s.classList.add('gone'); setTimeout(()=>s.remove(),450); } }
+if(API_URL.indexOf('PASTE_')===0){ document.getElementById('view-home').innerHTML='<div class="empty-state">Set API_URL first</div>'; hideSplash(); }
+else{ loadHome().finally(()=>setTimeout(hideSplash,300)); }
+/* Safety: never let splash hang more than 6s */
+setTimeout(hideSplash,6000);
 </script>
 </body>
 </html>
