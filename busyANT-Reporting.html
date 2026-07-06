@@ -325,6 +325,10 @@ details.more .field{background:transparent;padding:0;}
   <div class="sheet">
     <div class="grab"></div>
     <h3>Daily sales</h3>
+    <button class="btn btn-neutral" id="s_scan" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <span style="font-size:18px;">📷</span> Scan paper report
+    </button>
+    <input type="file" id="s_scanFile" accept="image/*" capture="environment" style="display:none;">
     <div class="datebar" id="s_dateBar">
       <button class="arrow" id="s_prev" aria-label="Previous day">‹</button>
       <button class="datepick"><i class="cal">📅</i> <span id="s_dateText">—</span><input type="date" id="s_datePicker"></button>
@@ -388,6 +392,7 @@ details.more .field{background:transparent;padding:0;}
 <div class="wash" id="wash"><div class="check">✓</div><div class="msg" id="washMsg">Saved</div></div>
 <div class="toast" id="toast"></div>
 <div class="dayload" id="dayLoad"><img src="logo-web.png" alt="" class="dayload-logo"><span class="spinner-lg" style="margin-top:16px;"></span></div>
+<div class="dayload" id="scanLoad"><img src="logo-web.png" alt="" class="dayload-logo"><span class="spinner-lg" style="margin-top:16px;"></span><span class="loadmsg" id="scanMsg" style="margin-top:14px;">Reading your report…</span></div>
 
 <script>
 /* ========= CONFIG ========= */
@@ -783,6 +788,7 @@ function sFill(s){
 }
 async function openSalesEntry(date){
   sEntryDate=date||isoToday(); sRefreshDate();
+  scannedDepartments=null;
   document.getElementById('dayLoad').classList.add('show');
   sFill(null);
   try{ const d=await api({action:'getDay',date:sEntryDate}); sFill(d.sales); openModal('salesModal'); }
@@ -803,6 +809,12 @@ document.getElementById('s_save').onclick=async function(){
       customers:nval('s_cust'),itemsSold:nval('s_items'),cancels:nval('s_cancels'),returns:nval('s_returns'),coupon:nval('s_coupon'),discounts:nval('s_disc')});
     saved=true;
   }catch(err){ toast(err.message); btn.innerHTML=old; btn.disabled=false; return; }
+  // If this save came from a scan, also persist the department rows
+  if(scannedDepartments && scannedDepartments.length){
+    try{ await api({action:'saveDepartments',date:sEntryDate,enteredBy:whoami,departments:scannedDepartments}); }
+    catch(e){ toast('Sales saved, but departments failed: '+e.message); }
+    scannedDepartments=null;
+  }
   // Save succeeded — confirm now. Refresh is best-effort and must not turn a success into an error.
   dataChanged=true;
   wash('Saved','green'); dataChanged=true;
@@ -811,7 +823,65 @@ document.getElementById('s_save').onclick=async function(){
   btn.disabled=false;
 };
 
-/* ========= EXPENSE ENTRY SHEET ========= */
+/* ========= SCAN REPORT ========= */
+let scannedDepartments=null; // holds extracted departments until save
+document.getElementById('s_scan').onclick=()=>document.getElementById('s_scanFile').click();
+document.getElementById('s_scanFile').onchange=async function(){
+  const file=this.files&&this.files[0]; if(!file) return;
+  this.value=''; // reset so same file can be re-picked
+  const scanLoad=document.getElementById('scanLoad');
+  document.getElementById('scanMsg').textContent='Reading your report…';
+  scanLoad.classList.add('show');
+  try{
+    const {b64,mediaType}=await resizeImage(file, 1600);
+    const r=await api({action:'scanReport', image:b64, mediaType:mediaType});
+    if(!r.ok) throw new Error(r.error||'Scan failed');
+    applyScannedReport(r.report);
+  }catch(err){ toast(err.message); }
+  finally{ scanLoad.classList.remove('show'); }
+};
+/* downscale + compress the photo in-browser before sending (faster, cheaper, avoids huge payloads) */
+function resizeImage(file, maxDim){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      let {width,height}=img;
+      if(width>maxDim||height>maxDim){ const s=maxDim/Math.max(width,height); width=Math.round(width*s); height=Math.round(height*s); }
+      const c=document.createElement('canvas'); c.width=width; c.height=height;
+      c.getContext('2d').drawImage(img,0,0,width,height);
+      URL.revokeObjectURL(url);
+      const dataUrl=c.toDataURL('image/jpeg',0.85);
+      resolve({ b64:dataUrl.split(',')[1], mediaType:'image/jpeg' });
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Could not read image')); };
+    img.src=url;
+  });
+}
+/* fill the sales form from a scanned report, store departments for save */
+function applyScannedReport(rep){
+  if(!rep){ toast('Nothing extracted'); return; }
+  // set date if the report had one
+  if(rep.date){ sEntryDate=rep.date; sRefreshDate(); }
+  // unlock fields for review
+  sLock(false);
+  const set=(id,v)=>{ if(v!==null&&v!==undefined) document.getElementById(id).value=v; };
+  set('s_total',rep.totalSales); set('s_net',rep.netSales); set('s_cust',rep.customers);
+  set('s_items',rep.itemsSold); set('s_cancels',rep.cancels); set('s_returns',rep.returns);
+  set('s_coupon',rep.coupon); set('s_disc',rep.discounts);
+  computeAvg();
+  // open the "more fields" so returns/coupon/discounts are visible for review
+  const more=document.querySelector('#salesModal details.more'); if(more) more.open=true;
+  // store departments
+  scannedDepartments=(rep.departments||[]).filter(d=>d && (d.code||d.name));
+  // show a review banner
+  const status=document.getElementById('s_status');
+  const deptCount=scannedDepartments.length;
+  status.innerHTML='<div class="statuspill" style="background:var(--teal-bg);color:var(--teal);">✓ Scanned'+(deptCount?' · '+deptCount+' departments':'')+' — review, then Save</div>';
+  document.getElementById('s_edit').style.display='none';
+  const save=document.getElementById('s_save'); save.style.display='block'; save.textContent='Save report';
+  toast('Review the numbers, then Save');
+}
 function eRefreshDate(){ document.getElementById('e_dateText').textContent=prettyDate(eEntryDate); document.getElementById('e_datePicker').value=eEntryDate; }
 function buildCatPills(){
   const c=document.getElementById('e_catPills'); c.innerHTML='';
