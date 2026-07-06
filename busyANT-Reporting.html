@@ -555,14 +555,15 @@ async function loadHome(){
   const el=document.getElementById('view-home');
   const [from,to]=rangeToDates('month');
   try{
-    const [dash,sales]=await Promise.all([
+    const [dash,sales,exp]=await Promise.all([
       api({action:'getDashboard',from:from,to:to}),
-      api({action:'listSales',from:from,to:to})
+      api({action:'listSales',from:from,to:to}),
+      api({action:'listExpenses',from:from,to:to})
     ]);
-    renderHome(dash,sales.sales||[]);
+    renderHome(dash,sales.sales||[],exp.expenses||[]);
   }catch(err){ el.innerHTML='<div class="empty-state">'+err.message+'</div>'; }
 }
-function renderHome(d,salesList){
+function renderHome(d,salesList,expenses){
   const el=document.getElementById('view-home');
   const monthName=parseISO(isoToday()).toLocaleDateString(undefined,{month:'long',year:'numeric'});
 
@@ -606,6 +607,18 @@ function renderHome(d,salesList){
     html+='<div class="seclabel">EXPENSES</div><div class="card"><p class="latest sub" style="text-align:center;margin:6px 0;">No expenses yet — tap + to add one</p></div>';
   }
 
+  // recent expenses mini-list (newest first, up to 4)
+  if(expenses && expenses.length){
+    const recent=expenses.slice(0,4);
+    let rows=recent.map(e=>{
+      const ic=CAT_ICON[e.category]||'•';
+      return '<div class="lrow" data-eid="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+ic+'</div>'+
+        '<div><p class="nm">'+(e.vendor||e.category)+'</p><p class="meta">'+(e.category||'')+' · '+shortDate(e.date)+'</p></div></div>'+
+        '<span class="amt">'+money0(e.amount)+'</span></div>';
+    }).join('');
+    html+='<div class="seclabel">RECENT EXPENSES <span class="link" id="seeAllExp">See all ›</span></div><div class="list">'+rows+'</div>';
+  }
+
   // best day milestone
   if(real.length){
     const best=real.reduce((a,b)=>b.totalSales>a.totalSales?b:a);
@@ -621,6 +634,11 @@ function renderHome(d,salesList){
   const salesByDate={}; salesList.forEach(s=>{ if(!s.empty) salesByDate[s.date]=s; });
   trendData.forEach(t=>{ const s=salesByDate[t.date]; if(s) t.extra=Math.round(s.customers)+' customers'; });
   interactiveChart('homeChart', trendData, 'line', openSalesEntry);
+  // recent-expense interactions
+  const seeAll=document.getElementById('seeAllExp'); if(seeAll) seeAll.onclick=()=>showTab('expenses');
+  el.querySelectorAll('.lrow[data-eid]').forEach(r=> r.onclick=()=>{
+    const item=(expenses||[]).find(x=>String(x.id)===r.dataset.eid); if(item) openExpenseEntry(item);
+  });
 }
 
 /* ========= SALES LIST ========= */
