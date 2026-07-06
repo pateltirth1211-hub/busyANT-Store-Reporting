@@ -220,6 +220,23 @@ details.more .field{background:transparent;padding:0;}
 /* header logo */
 .header-logo{height:34px;width:auto;flex:0 0 auto;}
 
+/* interactive chart */
+.ichart{position:relative;width:100%;margin:6px 0 4px;-webkit-tap-highlight-color:transparent;}
+.ichart svg{width:100%;height:auto;display:block;overflow:visible;}
+.ichart .hit{fill:transparent;cursor:pointer;}
+.ichart .pt{fill:var(--amber);pointer-events:none;}
+.ichart .barhit{cursor:pointer;}
+.ichart .bar{fill:var(--amber);pointer-events:none;}
+.ichart .bar.sel{fill:var(--amber);}
+.readout{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;padding:10px 14px;
+  margin:8px 0 4px;display:flex;justify-content:space-between;align-items:center;min-height:20px;}
+.readout .l{font-size:12px;color:var(--text2);}
+.readout .l b{color:var(--text);font-weight:600;font-size:14px;display:block;}
+.readout .link{font-size:12px;color:var(--amber);font-weight:500;cursor:pointer;white-space:nowrap;}
+.readout.blank{color:var(--text3);justify-content:center;font-size:12px;}
+.chartaxis{position:relative;height:14px;margin-top:2px;}
+.chartaxis span{position:absolute;transform:translateX(-50%);font-size:10px;color:var(--text2);white-space:nowrap;}
+
 </style>
 </head>
 <body>
@@ -424,6 +441,53 @@ function showTab(tab){
 }
 document.querySelectorAll('.tabbar button').forEach(b=> b.onclick=()=>showTab(b.dataset.tab));
 
+/* ========= INTERACTIVE CHART ENGINE ========= */
+/* data = [{date, value, extra}], type='line'|'bar', onOpen(date) */
+function interactiveChart(mountId, data, type, onOpen){
+  const mount=document.getElementById(mountId); if(!mount) return;
+  if(!data.length){ mount.innerHTML='<div class="readout blank">No data in this range</div>'; return; }
+  const W=360, H=90, padL=4, padR=4, top=8, bot=70;
+  const max=Math.max(1,...data.map(d=>d.value));
+  const n=data.length;
+  const xAt=i=> n>1 ? padL+(i/(n-1))*(W-padL-padR) : W/2;
+  const yAt=v=> top+(1-v/max)*(bot-top);
+
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">';
+  if(type==='line'){
+    const pts=data.map((d,i)=>[xAt(i),yAt(d.value)]);
+    svg+='<path d="M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+'" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    // peak + latest labeled dots
+    const peakI=data.reduce((bi,d,i)=>d.value>data[bi].value?i:bi,0);
+    [peakI,n-1].forEach(i=>{ svg+='<circle class="pt" cx="'+xAt(i).toFixed(1)+'" cy="'+yAt(data[i].value).toFixed(1)+'" r="3.5"/>'; });
+    // invisible tap targets per point
+    data.forEach((d,i)=>{ const w=(W-padL-padR)/n; svg+='<rect class="hit" data-i="'+i+'" x="'+(xAt(i)-w/2).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'"/>'; });
+  }else{
+    const bw=Math.min(14,(W-padL-padR)/n*0.7);
+    data.forEach((d,i)=>{ const x=xAt(i), h=Math.max(1,(d.value/max)*(bot-top));
+      svg+='<rect class="bar" data-bi="'+i+'" x="'+(x-bw/2).toFixed(1)+'" y="'+(bot-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2"/>';
+      const w=(W-padL-padR)/n; svg+='<rect class="barhit" data-i="'+i+'" x="'+(xAt(i)-w/2).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'"/>';
+    });
+  }
+  svg+='</svg>';
+
+  // axis ticks: first, mid, last
+  const idxs=[...new Set([0,Math.floor(n/2),n-1])];
+  const axis='<div class="chartaxis">'+idxs.map(i=>'<span style="left:'+((xAt(i)/W)*100).toFixed(1)+'%;">'+parseISO(data[i].date).toLocaleDateString(undefined,{month:'numeric',day:'numeric'})+'</span>').join('')+'</div>';
+
+  mount.innerHTML='<div class="ichart">'+svg+'</div>'+axis+'<div class="readout blank" id="'+mountId+'_ro">Tap a point to see that day</div>';
+
+  function select(i){
+    const d=data[i];
+    const ro=document.getElementById(mountId+'_ro');
+    ro.className='readout';
+    ro.innerHTML='<div class="l"><b>'+money0(d.value)+'</b>'+shortDate(d.date)+(d.extra?' · '+d.extra:'')+'</div>'+
+      '<span class="link" data-open="'+d.date+'">View day ›</span>';
+    ro.querySelector('.link').onclick=()=>onOpen(d.date);
+    mount.querySelectorAll('.bar').forEach((b,bi)=>b.classList.toggle('sel',bi===i));
+  }
+  mount.querySelectorAll('.hit,.barhit').forEach(h=> h.onclick=()=>select(parseInt(h.dataset.i)));
+}
+
 /* ========= HOME ========= */
 async function loadHome(){
   const el=document.getElementById('view-home');
@@ -439,17 +503,6 @@ async function loadHome(){
 function renderHome(d,salesList){
   const el=document.getElementById('view-home');
   const monthName=parseISO(isoToday()).toLocaleDateString(undefined,{month:'long',year:'numeric'});
-  const profitClass=d.netProfit>=0?'up':'down';
-
-  // trend line from daily sales (oldest->newest)
-  const trend=(d.trend||[]).slice();
-  let path='', dot='';
-  if(trend.length){
-    const max=Math.max(1,...trend.map(t=>t.sales));
-    const pts=trend.map((t,i)=>{ const x=trend.length>1?(i/(trend.length-1))*360:180; const y=60-(t.sales/max)*48-6; return [x,y]; });
-    path='M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
-    dot='<circle cx="'+pts[pts.length-1][0].toFixed(1)+'" cy="'+pts[pts.length-1][1].toFixed(1)+'" r="3.5" fill="var(--amber)"/>';
-  }
 
   // latest entered day (first non-empty in newest-first list) + previous for comparison
   const real=salesList.filter(s=>!s.empty);
@@ -469,8 +522,8 @@ function renderHome(d,salesList){
       '<p class="hero-num">'+money0(d.totalSales)+'</p>'+
       '<div class="hero-sub"><span>'+money0(d.netProfit)+' profit</span>'+
         '<span class="dim">· '+(d.margin||0).toFixed(1)+'% margin</span></div>'+
-      (trend.length?'<svg viewBox="0 0 360 60" class="hero-trend"><path d="'+path+'" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+dot+'</svg>':'')+
     '</div>'+
+    '<div id="homeChart"></div>'+
     '<div class="seclabel">LATEST DAY</div>'+latestCard;
 
   // rings (top expense categories)
@@ -501,6 +554,11 @@ function renderHome(d,salesList){
 
   html+='<div style="height:20px;"></div>';
   el.innerHTML=html;
+  // interactive sales line for the month (oldest -> newest)
+  const trendData=(d.trend||[]).map(t=>({date:t.date, value:t.sales, extra:null}));
+  const salesByDate={}; salesList.forEach(s=>{ if(!s.empty) salesByDate[s.date]=s; });
+  trendData.forEach(t=>{ const s=salesByDate[t.date]; if(s) t.extra=Math.round(s.customers)+' customers'; });
+  interactiveChart('homeChart', trendData, 'line', openSalesEntry);
 }
 
 /* ========= SALES LIST ========= */
@@ -528,8 +586,11 @@ function renderSalesList(list){
   let head=buildRanges('salesRanges',salesRange)+(salesRange==='custom'?customRangeHtml('s',salesFrom,salesTo):'');
   head+='<div class="rtotal"><p class="k">Total sales</p><p class="v">'+money0(total)+'</p><p class="d">'+real.length+' days · avg '+money0(avg)+'</p></div>';
   head+='<div class="searchbar"><i>🔍</i><input id="salesSearchInput" placeholder="Search by date" value="'+salesSearch+'"></div>';
-  el.innerHTML=head+'<div id="salesRows"></div><div style="height:20px;"></div>';
+  el.innerHTML=head+'<div id="salesChart"></div><div id="salesRows"></div><div style="height:20px;"></div>';
   wireRanges('salesRanges',m=>{ salesRange=m; loadSalesList(); },'s');
+  // interactive chart: daily sales across the range, oldest->newest
+  const chartData=list.filter(s=>!s.empty).slice().reverse().map(s=>({date:s.date,value:s.totalSales,extra:Math.round(s.customers)+' customers'}));
+  interactiveChart('salesChart', chartData, 'line', openSalesEntry);
   const si=document.getElementById('salesSearchInput');
   si.oninput=()=>{ salesSearch=si.value; drawSalesRows(); si.focus(); };
   drawSalesRows();
@@ -566,8 +627,15 @@ function renderExpenseList(list){
   let head=buildRanges('expRanges',expRange)+(expRange==='custom'?customRangeHtml('e',expFrom,expTo):'');
   head+='<div class="rtotal"><p class="k">Total expenses</p><p class="v">'+money0(total)+'</p><p class="d">'+list.length+' entries</p></div>';
   head+='<div class="searchbar"><i>🔍</i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
-  el.innerHTML=head+'<div id="expRows"></div><div style="height:20px;"></div>';
+  el.innerHTML=head+'<div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
   wireRanges('expRanges',m=>{ expRange=m; loadExpenseList(); },'e');
+  // interactive daily-spend bars: sum expenses per day, oldest->newest
+  const byDay={}; list.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+e.amount; });
+  const barData=Object.keys(byDay).sort().map(dt=>({date:dt,value:byDay[dt],extra:null}));
+  interactiveChart('expChart', barData, 'bar', dt=>{
+    // open the first expense of that day for editing
+    const first=expCache.filter(x=>x.date===dt)[0]; if(first) openExpenseEntry(first);
+  });
   const si=document.getElementById('expSearchInput');
   si.oninput=()=>{ expSearch=si.value; drawExpRows(); si.focus(); };
   drawExpRows();
