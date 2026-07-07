@@ -643,7 +643,7 @@ function renderHome(d,salesList,expenses,goal,prevDash){
     '<circle cx="90" cy="90" r="'+R+'" fill="none" stroke="var(--border)" stroke-width="12"/>'+
     '<circle cx="90" cy="90" r="'+R+'" fill="none" stroke="'+ringCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'"/></svg>'+
     '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;">'+
-    '<p style="margin:0;font-size:10px;color:var(--text2);letter-spacing:0.05em;">TOTAL SALES</p>'+
+    '<p style="margin:0;font-size:10px;color:var(--text2);letter-spacing:0.05em;">SALES THIS MONTH</p>'+
     '<p style="margin:2px 0 0;font-size:28px;font-weight:600;letter-spacing:-0.5px;">'+money0(cumulative)+'</p>'+
     '<p style="margin:2px 0 0;font-size:11px;color:'+ringCol+';">'+pct+'% of '+money0(target)+' goal</p></div></div>'+
     '<p style="margin:14px 0 0;font-size:12px;color:'+ringCol+';"><i class="ti ti-trending-'+(profitable?'up':'down')+'" style="vertical-align:-2px;"></i> '+money0(d.netProfit)+' profit · '+(d.margin||0).toFixed(1)+'% margin</p>'+
@@ -761,7 +761,7 @@ function bestWeek(real){
   return best;
 }
 async function editGoal(current){
-  const v=prompt('Set your sales goal ($):', current||180000);
+  const v=prompt('Set your monthly sales goal ($):', current||180000);
   if(v===null) return;
   const g=parseFloat(String(v).replace(/[^0-9.]/g,''));
   if(!g||g<=0){ toast('Enter a valid number'); return; }
