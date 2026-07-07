@@ -369,6 +369,14 @@ details.more .field{background:transparent;padding:0;}
   <div class="sheet">
     <div class="grab"></div>
     <div class="sheet-head"><h3 id="expTitle">Add expense</h3><button class="closeX" id="e_close" aria-label="Close">✕</button></div>
+    <button class="btn btn-neutral" id="e_scan" style="margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <span style="font-size:18px;">📷</span> Scan receipt or check
+    </button>
+    <button class="btn btn-neutral" id="e_scanStmt" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;">
+      <span style="font-size:16px;">🏦</span> Scan bank statement
+    </button>
+    <input type="file" id="e_scanFile" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="e_stmtFile" accept="image/*" capture="environment" style="display:none;">
     <div class="datebar" id="e_dateBar">
       <button class="arrow" id="e_prev" aria-label="Previous day">‹</button>
       <button class="datepick"><i class="cal">📅</i> <span id="e_dateText">—</span><input type="date" id="e_datePicker"></button>
@@ -400,6 +408,16 @@ details.more .field{background:transparent;padding:0;}
     <div id="deptRanges"></div>
     <div id="deptBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>
 
+  </div>
+</div>
+
+<div class="modal" id="stmtModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-head"><h3>Review transactions</h3><button class="closeX" id="stmt_close" aria-label="Close">✕</button></div>
+    <p style="font-size:12px;color:var(--text2);margin:0 0 14px;">Tick the expenses to import. Unticked rows are skipped. Deposits and income are already filtered out.</p>
+    <div id="stmtList"></div>
+    <button class="btn btn-primary" id="stmt_import" style="margin-top:8px;">Import selected</button>
   </div>
 </div>
 
@@ -1011,6 +1029,82 @@ function openExpenseEntry(item){
   eRefreshDate(); buildCatPills(); openModal('expModal');
 }
 document.getElementById('e_edit').onclick=function(){ eSetLocked(false); document.getElementById('e_amount').focus(); };
+/* ----- receipt scan ----- */
+document.getElementById('e_scan').onclick=()=>document.getElementById('e_scanFile').click();
+document.getElementById('e_scanFile').onchange=async function(){
+  const file=this.files&&this.files[0]; if(!file) return;
+  this.value='';
+  const scanLoad=document.getElementById('scanLoad');
+  document.getElementById('scanMsg').textContent='Reading your receipt…';
+  scanLoad.classList.add('show');
+  try{
+    const {b64,mediaType}=await resizeImage(file,1600);
+    const r=await api({action:'scanReceipt', image:b64, mediaType:mediaType});
+    if(!r.ok) throw new Error(r.error||'Scan failed');
+    applyScannedReceipt(r.receipt);
+  }catch(err){ toast(err.message); }
+  finally{ scanLoad.classList.remove('show'); }
+};
+function applyScannedReceipt(rc){
+  if(!rc){ toast('Nothing extracted'); return; }
+  eSetLocked(false); // unlock for review
+  if(rc.amount) document.getElementById('e_amount').value=rc.amount;
+  if(rc.vendor) document.getElementById('e_vendor').value=rc.vendor;
+  const iso=safeISO(rc.date); if(iso){ eEntryDate=iso; eRefreshDate(); }
+  // category guess -> select matching pill if valid
+  if(rc.category && CATEGORIES.indexOf(rc.category)>=0){ selectedCat=rc.category; buildCatPills(); }
+  // note (optional) -> append to vendor field if vendor empty, else leave vendor as-is
+  if(rc.note && !document.getElementById('e_vendor').value){ document.getElementById('e_vendor').value=rc.note; }
+  toast('Review the details, then Add');
+}
+/* ----- bank statement scan (multi-transaction review) ----- */
+let stmtTx=[];
+document.getElementById('e_scanStmt').onclick=()=>document.getElementById('e_stmtFile').click();
+document.getElementById('e_stmtFile').onchange=async function(){
+  const file=this.files&&this.files[0]; if(!file) return;
+  this.value='';
+  const scanLoad=document.getElementById('scanLoad');
+  document.getElementById('scanMsg').textContent='Reading your statement…';
+  scanLoad.classList.add('show');
+  try{
+    const {b64,mediaType}=await resizeImage(file,2000);
+    const r=await api({action:'scanStatement', image:b64, mediaType:mediaType});
+    if(!r.ok) throw new Error(r.error||'Scan failed');
+    stmtTx=(r.transactions||[]).map((t,i)=>({
+      i:i, date:safeISO(t.date)||eEntryDate, amount:Math.abs(Number(t.amount)||0),
+      vendor:t.vendor||'', category:(CATEGORIES.indexOf(t.category)>=0?t.category:'Misc'), pick:true
+    })).filter(t=>t.amount>0);
+    if(!stmtTx.length){ toast('No expense transactions found'); return; }
+    renderStmtReview();
+    document.getElementById('stmtModal').classList.add('show');
+  }catch(err){ toast(err.message); }
+  finally{ scanLoad.classList.remove('show'); }
+};
+function renderStmtReview(){
+  const box=document.getElementById('stmtList');
+  box.innerHTML=stmtTx.map(t=>
+    '<div class="lrow" style="cursor:default;">'+
+    '<div class="l" style="gap:8px;"><input type="checkbox" data-i="'+t.i+'" '+(t.pick?'checked':'')+' style="width:18px;height:18px;flex:0 0 auto;">'+
+    '<div><p class="nm">'+(t.vendor||'(no name)')+'</p><div class="rmeta">'+catPill(t.category)+'<span style="font-size:11px;color:var(--text2);">'+shortDate(t.date)+'</span></div></div></div>'+
+    '<span class="amt">'+money0(t.amount)+'</span></div>').join('');
+  box.querySelectorAll('input[type=checkbox]').forEach(cb=> cb.onchange=()=>{ const t=stmtTx.find(x=>x.i==cb.dataset.i); if(t) t.pick=cb.checked; });
+}
+document.getElementById('stmt_close').onclick=()=>document.getElementById('stmtModal').classList.remove('show');
+document.getElementById('stmt_import').onclick=async function(){
+  const picks=stmtTx.filter(t=>t.pick);
+  if(!picks.length){ toast('Nothing selected'); return; }
+  const btn=this; btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Importing…';
+  let ok=0, fail=0;
+  for(const t of picks){
+    try{ await api({action:'addExpense',date:t.date,amount:t.amount,category:t.category,vendor:t.vendor,type:'one-time',enteredBy:whoami}); ok++; }
+    catch(e){ fail++; }
+  }
+  btn.disabled=false; btn.innerHTML='Import selected';
+  document.getElementById('stmtModal').classList.remove('show');
+  closeModal('expModal');
+  dataChanged=true; wash(ok+' imported','green'); refreshActive();
+  if(fail) toast(fail+' failed to import');
+}
 document.getElementById('e_prev').onclick=()=>{ const d=parseISO(eEntryDate); d.setDate(d.getDate()-1); eEntryDate=fmt(d); eRefreshDate(); };
 document.getElementById('e_next').onclick=()=>{ const d=parseISO(eEntryDate); d.setDate(d.getDate()+1); eEntryDate=fmt(d); eRefreshDate(); };
 document.getElementById('e_datePicker').onchange=function(){ if(this.value){ eEntryDate=this.value; eRefreshDate(); } };
