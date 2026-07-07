@@ -389,6 +389,16 @@ details.more .field{background:transparent;padding:0;}
   </div>
 </div>
 
+<div class="modal" id="deptModal">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h3 id="deptTitle">Departments</h3>
+    <div id="deptRanges"></div>
+    <div id="deptBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>
+    <button class="btn btn-neutral" id="dept_close" style="margin-top:14px;">Close</button>
+  </div>
+</div>
+
 <div class="wash" id="wash"><div class="check">✓</div><div class="msg" id="washMsg">Saved</div></div>
 <div class="toast" id="toast"></div>
 <div class="dayload" id="dayLoad"><img src="logo-web.png" alt="" class="dayload-logo"><span class="spinner-lg" style="margin-top:16px;"></span></div>
@@ -456,14 +466,14 @@ function wash(msg,color){ const w=document.getElementById('wash'); document.getE
 function rangeToDates(mode,cf,ct){
   const today=parseISO(isoToday()); const y=today.getFullYear(), m=today.getMonth();
   if(mode==='week'){ const f=new Date(today); const dow=(today.getDay()+6)%7; f.setDate(f.getDate()-dow); return [fmt(f),fmt(today)]; }
-  if(mode==='7'){ const f=new Date(today); f.setDate(f.getDate()-6); return [fmt(f),fmt(today)]; }
+  if(mode==='lastweek'){ const f=new Date(today); const dow=(today.getDay()+6)%7; f.setDate(f.getDate()-dow-7); const t=new Date(f); t.setDate(t.getDate()+6); return [fmt(f),fmt(t)]; }
   if(mode==='month'){ return [fmt(new Date(y,m,1)),fmt(today)]; }
   if(mode==='lastmonth'){ return [fmt(new Date(y,m-1,1)),fmt(new Date(y,m,0))]; }
   if(mode==='year'){ return [fmt(new Date(y,0,1)),fmt(today)]; }
   if(mode==='custom'&&cf&&ct) return [cf,ct];
   return [fmt(new Date(y,m,1)),fmt(today)];
 }
-const RANGE_LABELS=[['week','This week'],['7','Last 7 days'],['month','This month'],['lastmonth','Last month'],['year','This year'],['custom','Custom']];
+const RANGE_LABELS=[['week','This week'],['lastweek','Last week'],['month','This month'],['lastmonth','Last month'],['year','This year'],['custom','Custom']];
 
 /* ========= THEME ========= */
 (function(){ const saved=localStorage.getItem('theme')||'dark';
@@ -632,10 +642,17 @@ function renderHome(d,salesList,expenses){
       '<p style="margin:2px 0 0;font-size:11px;color:var(--text2);">'+shortDate(best.date)+' hit '+money0(best.totalSales)+'</p></div></div>';
   }
 
+  // departments entry card
+  html+='<div class="seclabel">EXPLORE</div>'+
+    '<div class="card lrow" id="openDepts" style="cursor:pointer;">'+
+    '<div class="l"><div class="licon" style="background:var(--amber-bg);">🏬</div>'+
+    '<div><p class="nm">Departments</p><p class="meta">See what sells most</p></div></div>'+
+    '<span style="color:var(--text2);font-size:18px;">›</span></div>';
+
   html+='<div style="height:20px;"></div>';
   el.innerHTML=html;
-  // interactive sales line for the month (oldest -> newest)
-  const trendData=(d.trend||[]).map(t=>({date:t.date, value:t.sales, extra:null}));
+  // department view opener
+  const openD=document.getElementById('openDepts'); if(openD) openD.onclick=()=>openDepartments();
   const salesByDate={}; salesList.forEach(s=>{ if(!s.empty) salesByDate[s.date]=s; });
   trendData.forEach(t=>{ const s=salesByDate[t.date]; if(s) t.extra=Math.round(s.customers)+' customers'; });
   interactiveChart('homeChart', trendData, 'line', openSalesEntry);
@@ -755,12 +772,61 @@ function wireRanges(id,onPick,prefix){
   const c=document.getElementById(id); if(!c) return;
   c.querySelectorAll('.rchip').forEach(b=> b.onclick=()=>onPick(b.dataset.r));
   const f=document.getElementById(prefix+'From'), t=document.getElementById(prefix+'To');
-  if(f) f.onchange=()=>{ if(prefix==='s'){salesFrom=f.value;} else {expFrom=f.value;} maybeReload(prefix); };
-  if(t) t.onchange=()=>{ if(prefix==='s'){salesTo=t.value;} else {expTo=t.value;} maybeReload(prefix); };
+  if(f) f.onchange=()=>{ if(prefix==='s'){salesFrom=f.value;} else if(prefix==='e'){expFrom=f.value;} else {deptFrom=f.value;} maybeReload(prefix); };
+  if(t) t.onchange=()=>{ if(prefix==='s'){salesTo=t.value;} else if(prefix==='e'){expTo=t.value;} else {deptTo=t.value;} maybeReload(prefix); };
 }
 function maybeReload(prefix){
   if(prefix==='s'){ if(salesFrom&&salesTo){ if(salesFrom>salesTo){const x=salesFrom;salesFrom=salesTo;salesTo=x;} loadSalesList(); } }
-  else{ if(expFrom&&expTo){ if(expFrom>expTo){const x=expFrom;expFrom=expTo;expTo=x;} loadExpenseList(); } }
+  else if(prefix==='e'){ if(expFrom&&expTo){ if(expFrom>expTo){const x=expFrom;expFrom=expTo;expTo=x;} loadExpenseList(); } }
+  else { if(deptFrom&&deptTo){ if(deptFrom>deptTo){const x=deptFrom;deptFrom=deptTo;deptTo=x;} loadDepartments(); } }
+}
+
+/* ========= DEPARTMENTS VIEW ========= */
+let deptRange='month', deptFrom=null, deptTo=null, deptData=null;
+function openDepartments(){ document.getElementById('deptModal').classList.add('show'); loadDepartments(); }
+document.getElementById('dept_close').onclick=()=>document.getElementById('deptModal').classList.remove('show');
+async function loadDepartments(){
+  const body=document.getElementById('deptBody');
+  document.getElementById('deptRanges').innerHTML=buildRanges('deptRangesBar',deptRange)+(deptRange==='custom'?customRangeHtml('d',deptFrom,deptTo):'');
+  wireRanges('deptRangesBar',m=>{ deptRange=m; loadDepartments(); },'d');
+  body.innerHTML='<div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
+  const [from,to]=rangeToDates(deptRange,deptFrom,deptTo);
+  try{
+    const r=await api({action:'getDepartments',from:from,to:to});
+    deptData=r; renderDepartments(r);
+  }catch(err){ body.innerHTML='<div class="empty-state">'+err.message+'</div>'; }
+}
+function titleCase(s){ return String(s).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
+function renderDepartments(r){
+  const body=document.getElementById('deptBody');
+  const list=(r.departments||[]).filter(d=>d.total>0);
+  if(!list.length){ body.innerHTML='<div class="empty-state">No department data in this range. Scan a report to add some.</div>'; return; }
+  const max=list[0].total;
+  let rows=list.map((d,i)=>{
+    const pct=Math.round(d.total/max*100);
+    return '<div class="deptrow" data-dept="'+encodeURIComponent(d.name)+'" style="cursor:pointer;margin-bottom:12px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">'+
+      '<span style="font-size:13px;color:var(--text);">'+(i+1)+'. '+titleCase(d.name)+'</span>'+
+      '<span style="font-size:13px;font-weight:600;color:var(--text);">'+money0(d.total)+' <span style="color:var(--text2);font-weight:400;font-size:11px;">'+d.share.toFixed(1)+'%</span></span>'+
+      '</div><div style="height:8px;background:var(--card2);border-radius:999px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:var(--amber);"></div></div></div>';
+  }).join('');
+  body.innerHTML='<div style="text-align:center;margin:6px 0 16px;"><p style="margin:0;font-size:11px;color:var(--text2);">Total department sales</p>'+
+    '<p style="margin:2px 0 0;font-size:24px;font-weight:600;">'+money0(r.total)+'</p></div>'+
+    rows+'<p style="margin:4px 0 0;font-size:11px;color:var(--text3);text-align:center;">Tap any department for its daily trend</p>';
+  body.querySelectorAll('.deptrow').forEach(row=> row.onclick=()=>showDeptTrend(decodeURIComponent(row.dataset.dept)));
+}
+function showDeptTrend(name){
+  const d=(deptData.departments||[]).find(x=>x.name===name); if(!d) return;
+  const body=document.getElementById('deptBody');
+  const days=d.daily.filter(x=>x.value>0).length;
+  const avg=days?d.total/days:0;
+  body.innerHTML='<button class="btn btn-neutral" id="deptBack" style="margin-bottom:14px;">‹ All departments</button>'+
+    '<div class="card"><p style="margin:0;font-size:15px;font-weight:600;">'+titleCase(name)+'</p>'+
+    '<p style="margin:2px 0 12px;font-size:12px;color:var(--text2);">'+money0(d.total)+' · avg '+money0(avg)+'/day</p>'+
+    '<div id="deptTrendChart"></div></div>';
+  document.getElementById('deptBack').onclick=()=>renderDepartments(deptData);
+  const trend=d.daily.map(x=>({date:x.date,value:x.value,extra:null}));
+  interactiveChart('deptTrendChart', trend, 'line', ()=>{});
 }
 
 /* ========= FAB + ADD CHOOSER ========= */
