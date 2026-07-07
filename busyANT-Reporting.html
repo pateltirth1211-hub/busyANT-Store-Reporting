@@ -13,14 +13,14 @@
   --blue:#85B7EB;
   --bg:#0e1420; --card:#151d2b; --card2:#1a2333;
   --text:#F1EFE8; --text2:#7d8598; --text3:#5c6373;
-  --border:#1f2a3d; --border2:#2a3547;
+  --border:#1f2a3d; --border2:#2a3547; --barlow:#3a4658;
   --radius:12px; --radius-lg:16px;
 }
 [data-theme="light"]{
   --amber-bg:#FAEEDA; --teal-bg:#E1F5EE; --red-bg:#FCEBEB;
   --bg:#F1EFE8; --card:#FFFFFF; --card2:#F7F5EF;
   --text:#2C2C2A; --text2:#5F5E5A; --text3:#888780;
-  --border:#E2E0D8; --border2:#CFCCC2;
+  --border:#E2E0D8; --border2:#CFCCC2; --barlow:#CFCCC2;
   --teal:#1D9E75; --teal-d:#0F6E56;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -270,11 +270,10 @@ details.more .field{background:transparent;padding:0;}
 /* interactive chart */
 .ichart{position:relative;width:100%;height:110px;margin:6px 0 4px;-webkit-tap-highlight-color:transparent;}
 .ichart svg{width:100%;height:110px;display:block;overflow:visible;}
-.ichart .hit{fill:transparent;cursor:pointer;}
-.ichart .pt{fill:var(--amber);pointer-events:none;}
-.ichart .barhit{cursor:pointer;}
-.ichart .bar{fill:var(--amber);pointer-events:none;}
-.ichart .bar.sel{fill:var(--amber);}
+.ichart .barhit{cursor:pointer;fill:transparent;}
+.ichart .bar{pointer-events:none;transition:opacity .12s;}
+.ichart .bar.sel{stroke:var(--text);stroke-width:1.5;opacity:1;}
+.ichart .barhit:active~.bar{opacity:.8;}
 .readout{background:var(--card);border:0.5px solid var(--border2);border-radius:12px;padding:10px 14px;
   margin:8px 0 4px;display:flex;justify-content:space-between;align-items:center;min-height:20px;}
 .readout .l{font-size:12px;color:var(--text2);}
@@ -553,54 +552,54 @@ document.querySelectorAll('.tabbar-c button').forEach(b=> b.onclick=()=>showTab(
 function interactiveChart(mountId, data, type, onOpen){
   const mount=document.getElementById(mountId); if(!mount) return;
   if(!data.length){ mount.innerHTML='<div class="readout blank">No data in this range</div>'; return; }
-  const W=360, H=90, padL=4, padR=4, top=8, bot=70;
-  const max=Math.max(1,...data.map(d=>d.value));
+  const W=360, H=96, padL=6, padR=6, top=10, bot=76;
+  const vals=data.map(d=>d.value);
+  const max=Math.max(1,...vals);
+  const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
   const n=data.length;
-  const xAt=i=> n>1 ? padL+(i/(n-1))*(W-padL-padR) : W/2;
+  const slot=(W-padL-padR)/n;
+  const bw=Math.min(26, slot*0.62);
+  const xCenter=i=> padL + slot*i + slot/2;
   const yAt=v=> top+(1-v/max)*(bot-top);
 
   let svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">';
-  if(type==='line'){
-    const pts=data.map((d,i)=>[xAt(i),yAt(d.value)]);
-    svg+='<path d="M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+'" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
-    // peak + latest labeled dots
-    const peakI=data.reduce((bi,d,i)=>d.value>data[bi].value?i:bi,0);
-    [peakI,n-1].forEach(i=>{ svg+='<circle class="pt" cx="'+xAt(i).toFixed(1)+'" cy="'+yAt(data[i].value).toFixed(1)+'" r="3.5"/>'; });
-    // invisible tap targets per point
-    data.forEach((d,i)=>{ const w=(W-padL-padR)/n; svg+='<rect class="hit" data-i="'+i+'" x="'+(xAt(i)-w/2).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'"/>'; });
-  }else{
-    const bw=Math.min(14,(W-padL-padR)/n*0.7);
-    data.forEach((d,i)=>{ const x=xAt(i), h=Math.max(1,(d.value/max)*(bot-top));
-      svg+='<rect class="bar" data-bi="'+i+'" x="'+(x-bw/2).toFixed(1)+'" y="'+(bot-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2"/>';
-      const w=(W-padL-padR)/n; svg+='<rect class="barhit" data-i="'+i+'" x="'+(xAt(i)-w/2).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'"/>';
-    });
-  }
+  // baseline
+  svg+='<line x1="0" y1="'+bot+'" x2="'+W+'" y2="'+bot+'" stroke="var(--border)" stroke-width="1"/>';
+  // bars, colored by above/below average
+  data.forEach((d,i)=>{
+    const x=xCenter(i), h=Math.max(2,(d.value/max)*(bot-top)), y=bot-h;
+    const above=d.value>=avg;
+    svg+='<rect class="bar" data-bi="'+i+'" x="'+(x-bw/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3" fill="'+(above?'var(--teal)':'var(--barlow)')+'"/>';
+    const w=slot; svg+='<rect class="barhit" data-i="'+i+'" x="'+(padL+slot*i).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+H+'"/>';
+  });
+  // average dashed line
+  if(n>1){ const ay=yAt(avg); svg+='<line x1="0" y1="'+ay.toFixed(1)+'" x2="'+W+'" y2="'+ay.toFixed(1)+'" stroke="var(--amber)" stroke-width="1.4" stroke-dasharray="5 4"/>'; }
   svg+='</svg>';
 
   // axis ticks: first, mid, last
   const idxs=[...new Set([0,Math.floor(n/2),n-1])];
-  const axis='<div class="chartaxis">'+idxs.map(i=>'<span style="left:'+((xAt(i)/W)*100).toFixed(1)+'%;">'+parseISO(data[i].date).toLocaleDateString(undefined,{month:'numeric',day:'numeric'})+'</span>').join('')+'</div>';
+  const axis='<div class="chartaxis">'+idxs.map(i=>'<span style="left:'+((xCenter(i)/W)*100).toFixed(1)+'%;">'+parseISO(data[i].date).toLocaleDateString(undefined,{month:'numeric',day:'numeric'})+'</span>').join('')+'</div>';
 
-  mount.innerHTML='<div class="ichart" style="position:relative;">'+svg+'<div class="vline hide" id="'+mountId+'_vl"></div><div class="tip hide" id="'+mountId+'_tip"></div></div>'+axis;
+  mount.innerHTML='<div class="ichart" style="position:relative;">'+svg+'<div class="tip hide" id="'+mountId+'_tip"></div></div>'+axis;
 
   const chartBox=mount.querySelector('.ichart');
   function select(i){
     const d=data[i];
     const tip=document.getElementById(mountId+'_tip');
-    const vl=document.getElementById(mountId+'_vl');
-    const xPct=(xAt(i)/W)*100;
-    const yPx=(yAt(d.value)/H); // fraction of svg height
-    const boxH=chartBox.clientHeight||90;
+    const xPct=(xCenter(i)/W)*100;
+    const boxH=chartBox.clientHeight||96;
+    const yPx=(yAt(d.value)/H)*boxH;
     tip.className='tip';
+    const vsAvg=avg>0?Math.round((d.value-avg)/avg*100):0;
     tip.innerHTML='<b>'+money0(d.value)+'</b><small>'+shortDate(d.date)+(d.extra?' · '+d.extra:'')+'</small>'+
-      '<span class="vd" data-open="'+d.date+'">View day ›</span>';
+      '<small style="color:'+(vsAvg>=0?'var(--teal)':'var(--text2)')+';">'+(vsAvg>=0?'+':'')+vsAvg+'% vs avg</small>'+
+      (onOpen?'<span class="vd" data-open="'+d.date+'">View day ›</span>':'');
     tip.style.left=Math.max(14,Math.min(96,xPct))+'%';
-    tip.style.top=Math.max(2,(yPx*boxH)-58)+'px';
-    tip.querySelector('.vd').onclick=(ev)=>{ ev.stopPropagation(); onOpen(d.date); };
-    vl.className='vline'; vl.style.left=xPct+'%'; vl.style.height=boxH+'px';
+    tip.style.top=Math.max(2,yPx-64)+'px';
+    const vd=tip.querySelector('.vd'); if(vd) vd.onclick=(ev)=>{ ev.stopPropagation(); onOpen(d.date); };
     mount.querySelectorAll('.bar').forEach((b,bi)=>b.classList.toggle('sel',bi===i));
   }
-  mount.querySelectorAll('.hit,.barhit').forEach(h=> h.onclick=()=>select(parseInt(h.dataset.i)));
+  mount.querySelectorAll('.barhit').forEach(h=> h.onclick=()=>select(parseInt(h.dataset.i)));
 }
 
 /* ========= HOME ========= */
@@ -974,7 +973,7 @@ function showDeptTrend(name){
     '<div id="deptTrendChart"></div></div>';
   document.getElementById('deptBack').onclick=()=>renderDepartments(deptData);
   const trend=d.daily.map(x=>({date:x.date,value:x.value,extra:null}));
-  interactiveChart('deptTrendChart', trend, 'line', ()=>{});
+  interactiveChart('deptTrendChart', trend, 'bar', null);
 }
 
 /* ========= TRENDS TAB ========= */
@@ -1062,7 +1061,7 @@ function renderTrends(sales, dash, prev){
 
   // sales-vs-expenses chart: daily sales line
   const trend=(dash.trend||[]).map(t=>({date:t.date,value:t.sales,extra:null}));
-  if(trend.length) interactiveChart('svExpChart', trend, 'line', ()=>{});
+  if(trend.length) interactiveChart('svExpChart', trend, 'bar', null);
 }
 
 /* ========= FAB + ADD CHOOSER ========= */
