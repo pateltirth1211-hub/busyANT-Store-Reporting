@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>busyANT Reporting</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css">
 <style>
 :root{
   --amber:#EF9F27; --amber-d:#BA7517; --amber-dd:#854F0B; --amber-t:#412402; --amber-bg:#3a2c12;
@@ -324,7 +325,7 @@ details.more .field{background:transparent;padding:0;}
   <section id="view-expenses" class="hide"></section>
 </div>
 
-<button class="fab" id="fab" aria-label="Add"><i>+</i></button>
+<button class="fab" id="fab" aria-label="Add"><i class="ti ti-plus"></i></button>
 
 <!-- ADD CHOOSER SHEET -->
 <div class="modal" id="addModal">
@@ -332,8 +333,8 @@ details.more .field{background:transparent;padding:0;}
     <div class="grab"></div>
     <div class="sheet-head"><h3>What do you want to add?</h3><button class="closeX" id="addCancel" aria-label="Close">✕</button></div>
     <div class="addchoose">
-      <button id="chooseSales"><div class="ic">💵</div><div class="t">Sales report</div><div class="s">Daily POS totals</div></button>
-      <button id="chooseExpense"><div class="ic">🧾</div><div class="t">Expense</div><div class="s">Bill or purchase</div></button>
+      <button id="chooseSales"><div class="ic"><i class="ti ti-cash"></i></div><div class="t">Sales report</div><div class="s">Daily POS totals</div></button>
+      <button id="chooseExpense"><div class="ic"><i class="ti ti-receipt"></i></div><div class="t">Expense</div><div class="s">Bill or purchase</div></button>
     </div>
 
   </div>
@@ -345,12 +346,12 @@ details.more .field{background:transparent;padding:0;}
     <div class="grab"></div>
     <div class="sheet-head"><h3>Daily sales</h3><button class="closeX" id="s_close" aria-label="Close">✕</button></div>
     <button class="btn btn-neutral" id="s_scan" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
-      <span style="font-size:18px;">📷</span> Scan paper report
+      <i class="ti ti-camera" style="font-size:18px;"></i> Scan paper report
     </button>
     <input type="file" id="s_scanFile" accept="image/*" capture="environment" style="display:none;">
     <div class="datebar" id="s_dateBar">
       <button class="arrow" id="s_prev" aria-label="Previous day">‹</button>
-      <button class="datepick"><i class="cal">📅</i> <span id="s_dateText">—</span><input type="date" id="s_datePicker"></button>
+      <button class="datepick"><i class="ti ti-calendar"></i> <span id="s_dateText">—</span><input type="date" id="s_datePicker"></button>
       <button class="arrow" id="s_next" aria-label="Next day">›</button>
     </div>
     <div id="s_status"></div>
@@ -385,16 +386,16 @@ details.more .field{background:transparent;padding:0;}
     <div class="grab"></div>
     <div class="sheet-head"><h3 id="expTitle">Add expense</h3><button class="closeX" id="e_close" aria-label="Close">✕</button></div>
     <button class="btn btn-neutral" id="e_scan" style="margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:8px;">
-      <span style="font-size:18px;">📷</span> Scan receipt or check
+      <i class="ti ti-camera" style="font-size:18px;"></i> Scan invoice or check
     </button>
     <button class="btn btn-neutral" id="e_scanStmt" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;">
-      <span style="font-size:16px;">🏦</span> Scan bank statement
+      <i class="ti ti-building-bank" style="font-size:16px;"></i> Scan bank statement
     </button>
     <input type="file" id="e_scanFile" accept="image/*" capture="environment" style="display:none;">
     <input type="file" id="e_stmtFile" accept="image/*" capture="environment" style="display:none;">
     <div class="datebar" id="e_dateBar">
       <button class="arrow" id="e_prev" aria-label="Previous day">‹</button>
-      <button class="datepick"><i class="cal">📅</i> <span id="e_dateText">—</span><input type="date" id="e_datePicker"></button>
+      <button class="datepick"><i class="ti ti-calendar"></i> <span id="e_dateText">—</span><input type="date" id="e_datePicker"></button>
       <button class="arrow" id="e_next" aria-label="Next day">›</button>
     </div>
     <div class="hero-field">
@@ -437,8 +438,9 @@ details.more .field{background:transparent;padding:0;}
 const API_URL = 'https://busyant-reporting.pateltirth1211.workers.dev/';
 const CATEGORIES = ['Inventory/Vendor','Rent','Payroll','Utilities','Supplies',
   'Maintenance','Insurance','Licenses/Fees','Bank/Card','Misc'];
-const CAT_ICON = {'Inventory/Vendor':'🚚','Rent':'🏪','Payroll':'👥','Utilities':'⚡','Supplies':'📦',
-  'Maintenance':'🔧','Insurance':'🛡️','Licenses/Fees':'📄','Bank/Card':'💳','Misc':'•'};
+const CAT_ICON = {'Inventory/Vendor':'ti-truck','Rent':'ti-building-store','Payroll':'ti-users','Utilities':'ti-bolt','Supplies':'ti-package',
+  'Maintenance':'ti-tool','Insurance':'ti-shield','Licenses/Fees':'ti-file-text','Bank/Card':'ti-credit-card','Misc':'ti-dots'};
+function catIcon(cat){ return '<i class="ti '+(CAT_ICON[cat]||'ti-dots')+'"></i>'; }
 
 /* ========= STATE ========= */
 let whoami = localStorage.getItem('who') || '';
@@ -466,7 +468,7 @@ const CAT_COLOR={'Inventory/Vendor':'amber','Rent':'amber','Payroll':'teal','Uti
   'Maintenance':'gray','Insurance':'purple','Licenses/Fees':'gray','Bank/Card':'red','Misc':'gray'};
 function catPill(cat){
   const c=CAT_COLOR[cat]||'gray';
-  return '<span class="catpill cp-'+c+'">'+(CAT_ICON[cat]||'•')+' '+cat.split('/')[0]+'</span>';
+  return '<span class="catpill cp-'+c+'">'+catIcon(cat)+' '+cat.split('/')[0]+'</span>';
 }
 function money(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function money0(n){ return '$'+Math.round(Number(n||0)).toLocaleString(); }
@@ -647,10 +649,10 @@ function renderHome(d,salesList,expenses){
     let rings=cats.map(c=>{
       const frac=c.amount/maxCat; const off=Math.round(138*(1-frac));
       const col=frac>0.85?'var(--red)':(frac>0.6?'var(--amber)':'var(--teal)');
-      const ic=CAT_ICON[c.category]||'•';
-      return '<div class="ring"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--border)" stroke-width="4.5"/>'+
-        '<circle cx="27" cy="27" r="22" fill="none" stroke="'+col+'" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="'+off+'" transform="rotate(-90 27 27)"/>'+
-        '<text x="27" y="32" text-anchor="middle" font-size="15">'+ic+'</text></svg>'+
+      return '<div class="ring"><div style="position:relative;width:52px;height:52px;">'+
+        '<svg viewBox="0 0 54 54" style="width:52px;height:52px;"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--border)" stroke-width="4.5"/>'+
+        '<circle cx="27" cy="27" r="22" fill="none" stroke="'+col+'" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="'+off+'" transform="rotate(-90 27 27)"/></svg>'+
+        '<i class="ti '+(CAT_ICON[c.category]||'ti-dots')+'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:17px;color:'+col+';"></i></div>'+
         '<p class="amt">'+money0(c.amount)+'</p><p class="st" style="color:var(--text2)">'+c.category.split('/')[0]+'</p></div>';
     }).join('');
     html+='<div class="seclabel">EXPENSES</div><div class="rings">'+rings+'</div>';
@@ -662,7 +664,7 @@ function renderHome(d,salesList,expenses){
   if(expenses && expenses.length){
     const recent=expenses.slice(0,4);
     let rows=recent.map(e=>{
-      const ic=CAT_ICON[e.category]||'•';
+      const ic=catIcon(e.category);
       return '<div class="lrow" data-eid="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+ic+'</div>'+
         '<div><p class="nm">'+(e.vendor||e.category)+'</p><p class="meta">'+(e.category||'')+' · '+shortDate(e.date)+'</p></div></div>'+
         '<span class="amt">'+money0(e.amount)+'</span></div>';
@@ -674,7 +676,7 @@ function renderHome(d,salesList,expenses){
   if(real.length){
     const best=real.reduce((a,b)=>b.totalSales>a.totalSales?b:a);
     html+='<div class="seclabel">HIGHLIGHT</div>'+
-      '<div class="milestone"><div class="ic">🏆</div><div><p style="margin:0;font-size:13px;font-weight:500;">Best day this month</p>'+
+      '<div class="milestone"><div class="ic"><i class="ti ti-trophy"></i></div><div><p style="margin:0;font-size:13px;font-weight:500;">Best day this month</p>'+
       '<p style="margin:2px 0 0;font-size:11px;color:var(--text2);">'+shortDate(best.date)+' hit '+money0(best.totalSales)+'</p></div></div>';
   }
 
@@ -717,7 +719,7 @@ function renderSalesList(list){
   const avg=real.length?total/real.length:0;
   let head=buildRanges('salesRanges',salesRange)+(salesRange==='custom'?customRangeHtml('s',salesFrom,salesTo):'');
   head+='<div class="rtotal"><p class="k">Total sales</p><p class="v">'+money0(total)+'</p><p class="d">'+real.length+' days · avg '+money0(avg)+'</p></div>';
-  head+='<div class="searchbar"><i>🔍</i><input id="salesSearchInput" placeholder="Search by date" value="'+salesSearch+'"></div>';
+  head+='<div class="searchbar"><i class="ti ti-search"></i><input id="salesSearchInput" placeholder="Search by date" value="'+salesSearch+'"></div>';
   el.innerHTML=head+'<div id="salesChart"></div><div id="salesRows"></div><div style="height:20px;"></div>';
   wireRanges('salesRanges',m=>{ salesRange=m; loadSalesList(); },'s');
   // interactive chart: daily sales across the range, oldest->newest
@@ -758,7 +760,7 @@ function renderExpenseList(list){
   const total=list.reduce((s,e)=>s+e.amount,0);
   let head=buildRanges('expRanges',expRange)+(expRange==='custom'?customRangeHtml('e',expFrom,expTo):'');
   head+='<div class="rtotal"><p class="k">Total expenses</p><p class="v">'+money0(total)+'</p><p class="d">'+list.length+' entries</p></div>';
-  head+='<div class="searchbar"><i>🔍</i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
+  head+='<div class="searchbar"><i class="ti ti-search"></i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
   el.innerHTML=head+'<div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
   wireRanges('expRanges',m=>{ expRange=m; loadExpenseList(); },'e');
   // interactive daily-spend bars: sum expenses per day, oldest->newest
@@ -783,7 +785,7 @@ function drawExpRows(){
   list.forEach(e=>{ if(!(e.date in idx)){ idx[e.date]=groups.length; groups.push({date:e.date,items:[]}); } groups[idx[e.date]].items.push(e); });
   box.innerHTML=groups.map(g=>{
     const rows=g.items.map(e=>
-      '<div class="lrow" data-id="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+(CAT_ICON[e.category]||'•')+'</div>'+
+      '<div class="lrow" data-id="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+catIcon(e.category)+'</div>'+
       '<div><p class="nm">'+(e.vendor||e.category)+'</p><div class="rmeta">'+catPill(e.category)+(e.type==='recurring'?'<span class="catpill cp-gray">recurring</span>':'')+'</div></div></div>'+
       '<span class="amt">'+money0(e.amount)+'</span></div>').join('');
     return '<div class="daygroup"><p class="dayhead">'+relHeader(g.date)+'</p><div class="list">'+rows+'</div></div>';
