@@ -1052,28 +1052,63 @@ function renderTrends(sales, dash, prev){
   const real=sales.filter(s=>!s.empty);
   let html='';
 
-  // 1. Day-of-week averages
-  const dow=[[],[],[],[],[],[],[]]; // Mon..Sun
+  // day-of-week averages (compute first, needed for insights)
+  const dow=[[],[],[],[],[],[],[]];
   real.forEach(s=>{ const idx=(parseISO(s.date).getDay()+6)%7; dow[idx].push(s.totalSales); });
   const dowAvg=dow.map(arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0);
   const dowMax=Math.max(1,...dowAvg);
   const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dowFull=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+  // FORECAST / PACE (only meaningful for month ranges)
+  if(real.length && (trendsRange==='month'||trendsRange==='lastmonth')){
+    const anyDate=parseISO(real[0].date);
+    const y=anyDate.getFullYear(), mo=anyDate.getMonth();
+    const daysInMonth=new Date(y,mo+1,0).getDate();
+    const dailyAvg=dash.totalSales/real.length;
+    const projected=dailyAvg*daysInMonth;
+    const isCurrent=(trendsRange==='month');
+    html+='<div class="card" style="text-align:center;margin-bottom:14px;">'+
+      '<p style="margin:0;font-size:11px;color:var(--text2);">'+(isCurrent?'On pace for (this month)':'Month total')+'</p>'+
+      '<p style="margin:3px 0 0;font-size:26px;font-weight:600;color:var(--teal);">~'+money0(projected)+'</p>'+
+      '<p style="margin:3px 0 0;font-size:11px;color:var(--text2);">'+money0(dailyAvg)+'/day avg · '+real.length+' of '+daysInMonth+' days'+(isCurrent?' logged':'')+'</p>'+
+      (isCurrent?'<p style="margin:6px 0 0;font-size:10px;color:var(--text3);">Estimate at current pace</p>':'')+'</div>';
+  }
+
+  // INSIGHT LINE (weekday gap or pace)
+  let insight='';
+  const validDow=dowAvg.map((v,i)=>({v,i})).filter(x=>x.v>0);
+  if(validDow.length>=2){
+    const hi=validDow.reduce((a,b)=>b.v>a.v?b:a), lo=validDow.reduce((a,b)=>b.v<a.v?b:a);
+    const gap=Math.round((hi.v-lo.v)/lo.v*100);
+    if(gap>=10) insight=dowFull[hi.i]+'s bring in '+gap+'% more than '+dowFull[lo.i]+'s.';
+  }
+  if(!insight && prev && prev.totalSales>0){ const ch=Math.round((dash.totalSales-prev.totalSales)/prev.totalSales*100);
+    insight='This period is pacing '+Math.abs(ch)+'% '+(ch>=0?'ahead of':'behind')+' the last one.'; }
+  if(insight) html+='<p style="margin:0 4px 14px;font-size:12px;color:var(--text2);"><i class="ti ti-bulb" style="vertical-align:-2px;color:var(--amber);"></i> '+insight+'</p>';
+
+  // DAY-OF-WEEK bars (colored busiest green / slowest gray, tappable)
+  const biMax=dowAvg.indexOf(Math.max(...dowAvg));
+  const nonZero=dowAvg.filter(v=>v>0);
+  const biMin=nonZero.length?dowAvg.indexOf(Math.min(...nonZero)):-1;
   let bars=dowAvg.map((v,i)=>{
     const h=Math.round(v/dowMax*90);
-    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+    const col=(i===biMax)?'var(--teal)':(i===biMin?'var(--barlow)':'var(--amber)');
+    return '<div class="dowbar" data-i="'+i+'" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">'+
       '<div style="font-size:9px;color:var(--text2);">'+(v>0?money0(v):'')+'</div>'+
-      '<div style="width:70%;height:'+Math.max(2,h)+'px;background:var(--amber);border-radius:4px 4px 0 0;"></div>'+
+      '<div style="width:70%;height:'+Math.max(2,h)+'px;background:'+col+';border-radius:4px 4px 0 0;"></div>'+
       '<div style="font-size:10px;color:var(--text2);">'+dowNames[i]+'</div></div>';
   }).join('');
   html+='<div class="seclabel">AVERAGE SALES BY DAY</div>'+
     '<div class="card"><div style="display:flex;align-items:flex-end;gap:4px;height:130px;">'+bars+'</div></div>';
-  // busiest/slowest callout
-  if(real.length){
-    const bi=dowAvg.indexOf(Math.max(...dowAvg)), si=dowAvg.indexOf(Math.min(...dowAvg.filter(v=>v>0)));
-    html+='<p style="margin:8px 4px 0;font-size:11px;color:var(--text2);">Busiest: '+dowNames[bi]+' ('+money0(dowAvg[bi])+' avg)'+(dowAvg[si]>0?' · Slowest: '+dowNames[si]+' ('+money0(dowAvg[si])+' avg)':'')+'</p>';
+
+  // ACTION INSIGHT under the bars (the gap, framed for action)
+  if(biMax>=0 && biMin>=0 && dowAvg[biMin]>0){
+    html+='<p style="margin:8px 4px 0;font-size:11px;color:var(--text2);"><i class="ti ti-bulb" style="vertical-align:-2px;color:var(--amber);"></i> '+
+      dowFull[biMax]+'s average '+money0(dowAvg[biMax])+' vs '+dowFull[biMin]+'s at '+money0(dowAvg[biMin])+' — staff and stock accordingly.</p>';
   }
 
-  // 2. Month-over-month
+  // VS PREVIOUS PERIOD
   html+='<div class="seclabel">VS PREVIOUS PERIOD</div>';
   if(prev){
     const rows=[['Sales',dash.totalSales,prev.totalSales,true],['Customers',dash.customers,prev.customers,false],
@@ -1093,7 +1128,7 @@ function renderTrends(sales, dash, prev){
     html+='<div class="card"><p class="latest sub" style="text-align:center;margin:6px 0;">Not enough history yet for comparison</p></div>';
   }
 
-  // 3. Sales vs expenses over time (using dashboard daily series if present)
+  // SALES VS EXPENSES
   html+='<div class="seclabel">SALES VS EXPENSES</div><div class="card">'+
     '<div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:10px;">'+
     '<div><p style="margin:0;font-size:11px;color:var(--text2);">Sales</p><p style="margin:2px 0 0;font-size:18px;font-weight:600;color:var(--teal);">'+money0(dash.totalSales)+'</p></div>'+
@@ -1103,7 +1138,11 @@ function renderTrends(sales, dash, prev){
 
   body.innerHTML=html;
 
-  // sales-vs-expenses chart: daily sales line
+  // day-of-week tap: show a small toast with the average
+  body.querySelectorAll('.dowbar').forEach(b=> b.onclick=()=>{
+    const i=parseInt(b.dataset.i), v=dowAvg[i];
+    toast(dowFull[i]+': '+(v>0?money0(v)+' average ('+dow[i].length+' days)':'no data'));
+  });
   const trend=(dash.trend||[]).map(t=>({date:t.date,value:t.sales,extra:null}));
   if(trend.length) interactiveChart('svExpChart', trend, 'bar', null);
 }
