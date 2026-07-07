@@ -144,6 +144,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 @media(min-width:720px){ .modal{align-items:center;} .modal .sheet{border-radius:20px;} }
 .sheet h3{margin:0 0 16px;font-size:18px;font-weight:600;}
 .sheet .grab{width:38px;height:4px;background:var(--border2);border-radius:999px;margin:0 auto 14px;}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.sheet-head h3{margin:0;font-size:18px;font-weight:600;}
+.closeX{width:32px;height:32px;border-radius:10px;border:none;background:var(--card2);color:var(--text2);
+  cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 
 /* add-type chooser */
 .addchoose{display:flex;gap:12px;}
@@ -311,12 +315,12 @@ details.more .field{background:transparent;padding:0;}
 <div class="modal" id="addModal">
   <div class="sheet">
     <div class="grab"></div>
-    <h3>What do you want to add?</h3>
+    <div class="sheet-head"><h3>What do you want to add?</h3><button class="closeX" id="addCancel" aria-label="Close">✕</button></div>
     <div class="addchoose">
       <button id="chooseSales"><div class="ic">💵</div><div class="t">Sales report</div><div class="s">Daily POS totals</div></button>
       <button id="chooseExpense"><div class="ic">🧾</div><div class="t">Expense</div><div class="s">Bill or purchase</div></button>
     </div>
-    <button class="btn btn-neutral" id="addCancel" style="margin-top:14px;">Cancel</button>
+
   </div>
 </div>
 
@@ -324,7 +328,7 @@ details.more .field{background:transparent;padding:0;}
 <div class="modal" id="salesModal">
   <div class="sheet">
     <div class="grab"></div>
-    <h3>Daily sales</h3>
+    <div class="sheet-head"><h3>Daily sales</h3><button class="closeX" id="s_close" aria-label="Close">✕</button></div>
     <button class="btn btn-neutral" id="s_scan" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;">
       <span style="font-size:18px;">📷</span> Scan paper report
     </button>
@@ -356,7 +360,7 @@ details.more .field{background:transparent;padding:0;}
     <div class="computed"><span>Avg / customer</span><span id="s_avg">$0.00</span></div>
     <button class="btn btn-neutral" id="s_edit" style="margin-bottom:10px;display:none;">Edit</button>
     <button class="btn btn-primary" id="s_save">Save report</button>
-    <button class="btn btn-neutral" id="s_close" style="margin-top:10px;">Close</button>
+
   </div>
 </div>
 
@@ -364,7 +368,7 @@ details.more .field{background:transparent;padding:0;}
 <div class="modal" id="expModal">
   <div class="sheet">
     <div class="grab"></div>
-    <h3 id="expTitle">Add expense</h3>
+    <div class="sheet-head"><h3 id="expTitle">Add expense</h3><button class="closeX" id="e_close" aria-label="Close">✕</button></div>
     <div class="datebar" id="e_dateBar">
       <button class="arrow" id="e_prev" aria-label="Previous day">‹</button>
       <button class="datepick"><i class="cal">📅</i> <span id="e_dateText">—</span><input type="date" id="e_datePicker"></button>
@@ -385,17 +389,17 @@ details.more .field{background:transparent;padding:0;}
     <button class="btn btn-neutral" id="e_edit" style="display:none;margin-bottom:10px;">Edit</button>
     <button class="btn btn-primary" id="e_add">Add expense</button>
     <button class="btn btn-danger" id="e_delete" style="margin-top:10px;display:none;">Delete</button>
-    <button class="btn btn-neutral" id="e_close" style="margin-top:10px;">Close</button>
+
   </div>
 </div>
 
 <div class="modal" id="deptModal">
   <div class="sheet">
     <div class="grab"></div>
-    <h3 id="deptTitle">Departments</h3>
+    <div class="sheet-head"><h3 id="deptTitle">Departments</h3><button class="closeX" id="dept_close" aria-label="Close">✕</button></div>
     <div id="deptRanges"></div>
     <div id="deptBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>
-    <button class="btn btn-neutral" id="dept_close" style="margin-top:14px;">Close</button>
+
   </div>
 </div>
 
