@@ -944,32 +944,76 @@ async function loadDepartments(){
   }catch(err){ document.getElementById('deptBody').innerHTML='<div class="empty-state">'+err.message+'</div>'; }
 }
 function titleCase(s){ return String(s).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
+const DONUT_COLORS=['#EF9F27','#5DCAA5','#85B7EB','#C4879B','#9F8FDE','#E27B58'];
+let deptShowAll=false;
 function renderDepartments(r){
   const body=document.getElementById('deptBody');
   const list=(r.departments||[]).filter(d=>d.total>0);
   if(!list.length){ body.innerHTML='<div class="empty-state">No department data in this range. Scan a report to add some.</div>'; return; }
+  const total=r.total||list.reduce((s,d)=>s+d.total,0);
   const max=list[0].total;
-  let rows=list.map((d,i)=>{
+
+  // donut: top 6 + other
+  const topN=list.slice(0,6);
+  const otherTotal=list.slice(6).reduce((s,d)=>s+d.total,0);
+  const slices=topN.map((d,i)=>({name:titleCase(d.name),val:d.total,col:DONUT_COLORS[i]}));
+  if(otherTotal>0) slices.push({name:'Other',val:otherTotal,col:'var(--barlow)'});
+  const R=70, CIRC=Math.round(2*Math.PI*R);
+  let acc=0, segs='';
+  slices.forEach(s=>{ const frac=s.val/total; const len=Math.round(CIRC*frac); const gap=CIRC-len;
+    segs+='<circle cx="100" cy="100" r="'+R+'" fill="none" stroke="'+s.col+'" stroke-width="26" stroke-dasharray="'+len+' '+gap+'" stroke-dashoffset="'+(-acc)+'" transform="rotate(-90 100 100)"/>';
+    acc+=len; });
+  const legend=slices.map(s=>'<span style="display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+s.col+';"></span>'+s.name+' '+Math.round(s.val/total*100)+'%</span>').join('');
+
+  // insight: top-3 concentration
+  const top3=list.slice(0,3).reduce((s,d)=>s+d.total,0);
+  const top3pct=Math.round(top3/total*100);
+  const insight='Your top 3 departments drive '+top3pct+'% of sales.';
+
+  // rows (with trend arrows), long-tail grouped
+  const shown=deptShowAll?list:list.slice(0,10);
+  let rows=shown.map((d,i)=>{
     const pct=Math.round(d.total/max*100);
+    let arrow='';
+    if(d.prev>0){ const ch=Math.round((d.total-d.prev)/d.prev*100);
+      if(Math.abs(ch)>=1) arrow='<span style="font-size:10px;color:'+(ch>=0?'var(--teal)':'var(--red)')+';margin-left:6px;">'+(ch>=0?'▲':'▼')+Math.abs(ch)+'%</span>'; }
+    else if(d.total>0){ arrow='<span style="font-size:10px;color:var(--text3);margin-left:6px;">new</span>'; }
     return '<div class="deptrow" data-dept="'+encodeURIComponent(d.name)+'" style="cursor:pointer;margin-bottom:12px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">'+
-      '<span style="font-size:13px;color:var(--text);">'+(i+1)+'. '+titleCase(d.name)+'</span>'+
+      '<span style="font-size:13px;color:var(--text);">'+(i+1)+'. '+titleCase(d.name)+arrow+'</span>'+
       '<span style="font-size:13px;font-weight:600;color:var(--text);">'+money0(d.total)+' <span style="color:var(--text2);font-weight:400;font-size:11px;">'+d.share.toFixed(1)+'%</span></span>'+
       '</div><div style="height:8px;background:var(--card2);border-radius:999px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:var(--amber);"></div></div></div>';
   }).join('');
-  body.innerHTML='<div style="text-align:center;margin:6px 0 16px;"><p style="margin:0;font-size:11px;color:var(--text2);">Total department sales</p>'+
-    '<p style="margin:2px 0 0;font-size:24px;font-weight:600;">'+money0(r.total)+'</p></div>'+
-    rows+'<p style="margin:4px 0 0;font-size:11px;color:var(--text3);text-align:center;">Tap any department for its daily trend</p><div style="height:20px;"></div>';
+  let moreBtn='';
+  if(list.length>10){ moreBtn='<button class="btn btn-neutral" id="deptMore" style="margin:4px 0 8px;">'+(deptShowAll?'Show top 10':'Show all '+list.length+' departments')+'</button>'; }
+
+  body.innerHTML=
+    // hero + donut
+    '<div class="card" style="text-align:center;margin-bottom:14px;">'+
+    '<p style="margin:0;font-size:11px;color:var(--text2);">Total department sales</p>'+
+    '<p style="margin:2px 0 2px;font-size:24px;font-weight:600;">'+money0(total)+'</p>'+
+    '<p style="margin:0 0 12px;font-size:11px;color:var(--text2);">'+list.length+' active · top: '+titleCase(list[0].name)+'</p>'+
+    '<svg viewBox="0 0 200 200" style="width:150px;height:150px;display:block;margin:0 auto;">'+segs+'</svg>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--text2);justify-content:center;margin-top:12px;">'+legend+'</div></div>'+
+    // insight
+    '<p style="margin:0 4px 12px;font-size:12px;color:var(--text2);"><i class="ti ti-bulb" style="vertical-align:-2px;color:var(--amber);"></i> '+insight+'</p>'+
+    // ranked rows
+    rows+moreBtn+
+    '<p style="margin:4px 0 0;font-size:11px;color:var(--text3);text-align:center;">Tap any department for its daily trend</p><div style="height:20px;"></div>';
+
   body.querySelectorAll('.deptrow').forEach(row=> row.onclick=()=>showDeptTrend(decodeURIComponent(row.dataset.dept)));
+  const mb=document.getElementById('deptMore'); if(mb) mb.onclick=()=>{ deptShowAll=!deptShowAll; renderDepartments(r); };
 }
 function showDeptTrend(name){
   const d=(deptData.departments||[]).find(x=>x.name===name); if(!d) return;
   const body=document.getElementById('deptBody');
   const days=d.daily.filter(x=>x.value>0).length;
   const avg=days?d.total/days:0;
+  let trendNote='';
+  if(d.prev>0){ const ch=Math.round((d.total-d.prev)/d.prev*100); trendNote=' · '+(ch>=0?'▲':'▼')+Math.abs(ch)+'% vs last period'; }
   body.innerHTML='<button class="btn btn-neutral" id="deptBack" style="margin-bottom:14px;">‹ All departments</button>'+
     '<div class="card"><p style="margin:0;font-size:15px;font-weight:600;">'+titleCase(name)+'</p>'+
-    '<p style="margin:2px 0 12px;font-size:12px;color:var(--text2);">'+money0(d.total)+' · avg '+money0(avg)+'/day</p>'+
+    '<p style="margin:2px 0 12px;font-size:12px;color:var(--text2);">'+money0(d.total)+' · avg '+money0(avg)+'/day'+trendNote+'</p>'+
     '<div id="deptTrendChart"></div></div>';
   document.getElementById('deptBack').onclick=()=>renderDepartments(deptData);
   const trend=d.daily.map(x=>({date:x.date,value:x.value,extra:null}));
