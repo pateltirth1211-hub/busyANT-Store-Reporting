@@ -608,91 +608,165 @@ async function loadHome(){
   const el=document.getElementById('view-home');
   const [from,to]=rangeToDates('month');
   try{
-    const [dash,sales,exp]=await Promise.all([
+    const [dash,sales,exp,goal]=await Promise.all([
       api({action:'getDashboard',from:from,to:to}),
       api({action:'listSales',from:from,to:to}),
-      api({action:'listExpenses',from:from,to:to})
+      api({action:'listExpenses',from:from,to:to}),
+      api({action:'getGoal'})
     ]);
-    renderHome(dash,sales.sales||[],exp.expenses||[]);
+    // previous month dashboard for month-vs-month (best-effort)
+    const lm=rangeToDates('lastmonth');
+    const prevDash=await api({action:'getDashboard',from:lm[0],to:lm[1]}).catch(()=>null);
+    renderHome(dash,sales.sales||[],exp.expenses||[],goal,prevDash);
   }catch(err){ el.innerHTML='<div class="empty-state">'+err.message+'</div>'; }
 }
-function renderHome(d,salesList,expenses){
+function greetWord(){ const h=new Date().getHours(); return h<12?'Good morning':h<18?'Good afternoon':'Good evening'; }
+function firstName(){ return (whoami||'').trim().split(/\s+/)[0]||''; }
+function renderHome(d,salesList,expenses,goal,prevDash){
   const el=document.getElementById('view-home');
-  const monthName=parseISO(isoToday()).toLocaleDateString(undefined,{month:'long',year:'numeric'});
-
-  // latest entered day (first non-empty in newest-first list) + previous for comparison
   const real=salesList.filter(s=>!s.empty);
-  let latestCard='<div class="card"><p class="latest sub" style="text-align:center;margin:6px 0;">No sales entered yet this month</p></div>';
-  if(real.length){
-    const latest=real[0], prev=real[1];
-    let chip='';
-    if(prev){ const pct=Math.round((latest.totalSales-prev.totalSales)/prev.totalSales*100);
-      chip='<span class="chip '+(pct>=0?'up':'down')+'">'+(pct>=0?'▲ ':'▼ ')+Math.abs(pct)+'% vs prev</span>'; }
-    latestCard='<div class="card latest"><div><p class="big">'+money0(latest.totalSales)+'</p>'+
-      '<p class="sub">'+shortDate(latest.date)+' · '+Math.round(latest.customers)+' customers</p></div>'+chip+'</div>';
+  const cumulative=(goal&&goal.cumulative)||d.totalSales||0;
+  const target=(goal&&goal.goal)||180000;
+  const pct=Math.min(100,Math.round(cumulative/target*100));
+  const profitable=(d.netProfit||0)>=0;
+
+  // greeting
+  let html='<div style="margin-bottom:16px;"><p style="margin:0;font-size:19px;font-weight:600;">'+greetWord()+(firstName()?', '+firstName():'')+'</p>'+
+    '<p style="margin:2px 0 0;font-size:12px;color:var(--text2);">'+new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+'</p></div>';
+
+  // goal-ring hero (cumulative toward target)
+  const R=78, C=Math.round(2*Math.PI*R), off=Math.round(C*(1-pct/100));
+  const ringCol=profitable?'var(--teal)':'var(--amber)';
+  html+='<div class="hero-ring" id="goalHero" style="background:'+(profitable?'var(--teal-bg)':'var(--amber-bg)')+';border-radius:18px;padding:20px 16px;text-align:center;margin-bottom:14px;cursor:pointer;">'+
+    '<div style="position:relative;width:180px;height:180px;margin:0 auto;">'+
+    '<svg viewBox="0 0 180 180" style="width:180px;height:180px;transform:rotate(-90deg);">'+
+    '<circle cx="90" cy="90" r="'+R+'" fill="none" stroke="var(--border)" stroke-width="12"/>'+
+    '<circle cx="90" cy="90" r="'+R+'" fill="none" stroke="'+ringCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+off+'"/></svg>'+
+    '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;">'+
+    '<p style="margin:0;font-size:10px;color:var(--text2);letter-spacing:0.05em;">TOTAL SALES</p>'+
+    '<p style="margin:2px 0 0;font-size:28px;font-weight:600;letter-spacing:-0.5px;">'+money0(cumulative)+'</p>'+
+    '<p style="margin:2px 0 0;font-size:11px;color:'+ringCol+';">'+pct+'% of '+money0(target)+' goal</p></div></div>'+
+    '<p style="margin:14px 0 0;font-size:12px;color:'+ringCol+';"><i class="ti ti-trending-'+(profitable?'up':'down')+'" style="vertical-align:-2px;"></i> '+money0(d.netProfit)+' profit · '+(d.margin||0).toFixed(1)+'% margin</p>'+
+    '<p style="margin:8px 0 0;font-size:11px;color:var(--text3);">Tap to edit your goal</p></div>';
+
+  // stat tiles (this month vs previous day where available)
+  const latest=real[0], prev=real[1];
+  function tile(label,val,now,was){
+    let arrow='';
+    if(was!==undefined&&was!==null&&was!==0){ const p=Math.round((now-was)/Math.abs(was)*100); arrow='<p style="margin:1px 0 0;font-size:11px;color:'+(now>=was?'var(--teal)':'var(--red)')+';">'+(now>=was?'▲ ':'▼ ')+Math.abs(p)+'% vs yest</p>'; }
+    return '<div style="background:var(--card);border-radius:12px;padding:12px 14px;"><p style="margin:0;font-size:11px;color:var(--text2);">'+label+'</p>'+
+      '<p style="margin:3px 0 0;font-size:19px;font-weight:600;">'+val+'</p>'+arrow+'</div>';
+  }
+  if(latest){
+    const lProfit=latest.totalSales*(d.margin/100||0);
+    const pProfit=prev?prev.totalSales*(d.margin/100||0):null;
+    const lAvg=latest.customers?latest.totalSales/latest.customers:0;
+    const pAvg=prev&&prev.customers?prev.totalSales/prev.customers:null;
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'+
+      tile('Sales (latest)',money0(latest.totalSales),latest.totalSales,prev?prev.totalSales:null)+
+      tile('Profit (est)',money0(lProfit),lProfit,pProfit)+
+      tile('Customers',Math.round(latest.customers).toLocaleString(),latest.customers,prev?prev.customers:null)+
+      tile('Avg sale',money(lAvg),lAvg,pAvg)+'</div>';
   }
 
-  let html=
-    '<div class="hero-wrap">'+
-      '<p class="hero-label">Sales · '+monthName+'</p>'+
-      '<p class="hero-num">'+money0(d.totalSales)+'</p>'+
-      '<div class="hero-sub"><span>'+money0(d.netProfit)+' profit</span>'+
-        '<span class="dim">· '+(d.margin||0).toFixed(1)+'% margin</span></div>'+
-    '</div>'+
-    '<div id="homeChart"></div>'+
-    '<div class="seclabel">LATEST DAY</div>'+latestCard;
+  // month vs last month
+  if(prevDash&&prevDash.totalSales>0){
+    const now=d.totalSales, was=prevDash.totalSales;
+    const chg=Math.round((now-was)/was*100);
+    const mx=Math.max(now,was), nowW=Math.round(now/mx*100), wasW=Math.round(was/mx*100);
+    html+='<div style="background:var(--card);border-radius:12px;padding:14px;margin-bottom:14px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;"><span style="font-size:12px;color:var(--text2);">This month vs last</span>'+
+      '<span style="font-size:12px;color:'+(chg>=0?'var(--teal)':'var(--red)')+';font-weight:500;">'+(chg>=0?'+':'')+chg+'%</span></div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="font-size:10px;color:var(--text2);width:38px;">This</span>'+
+      '<div style="flex:1;height:10px;background:var(--card2);border-radius:999px;overflow:hidden;"><div style="width:'+nowW+'%;height:100%;background:var(--amber);"></div></div>'+
+      '<span style="font-size:10px;width:56px;text-align:right;">'+money0(now)+'</span></div>'+
+      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:10px;color:var(--text2);width:38px;">Last</span>'+
+      '<div style="flex:1;height:10px;background:var(--card2);border-radius:999px;overflow:hidden;"><div style="width:'+wasW+'%;height:100%;background:var(--border2);"></div></div>'+
+      '<span style="font-size:10px;color:var(--text2);width:56px;text-align:right;">'+money0(was)+'</span></div></div>';
+  }
 
-  // rings (top expense categories)
+  // milestone badges
+  let badges=[];
+  if(real.length){
+    const best=real.reduce((a,b)=>b.totalSales>a.totalSales?b:a);
+    badges.push('<div style="flex:0 0 auto;background:var(--amber-bg);border-radius:12px;padding:12px 14px;text-align:center;min-width:96px;"><i class="ti ti-trophy" style="font-size:22px;color:var(--amber);"></i><p style="margin:6px 0 0;font-size:11px;font-weight:500;">Best day</p><p style="margin:0;font-size:10px;color:var(--amber-d);">'+money0(best.totalSales)+'</p></div>');
+    // logging streak (consecutive days up to latest)
+    const streak=calcStreak(real);
+    if(streak>=2) badges.push('<div style="flex:0 0 auto;background:var(--teal-bg);border-radius:12px;padding:12px 14px;text-align:center;min-width:96px;"><i class="ti ti-flame" style="font-size:22px;color:var(--teal);"></i><p style="margin:6px 0 0;font-size:11px;font-weight:500;">'+streak+'-day streak</p><p style="margin:0;font-size:10px;color:var(--teal-d);">logged daily</p></div>');
+    // best week (max 7-day rolling sum)
+    const bw=bestWeek(real);
+    if(bw>0) badges.push('<div style="flex:0 0 auto;background:#12283f;border-radius:12px;padding:12px 14px;text-align:center;min-width:96px;"><i class="ti ti-calendar-star" style="font-size:22px;color:var(--blue);"></i><p style="margin:6px 0 0;font-size:11px;font-weight:500;">Best week</p><p style="margin:0;font-size:10px;color:var(--blue);">'+money0(bw)+'</p></div>');
+  }
+  if(badges.length){
+    html+='<div class="seclabel">MILESTONES</div><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;">'+badges.join('')+'</div>';
+  }
+
+  // expense rings
   const cats=(d.byCategory||[]).slice(0,4);
   if(cats.length){
     const maxCat=Math.max(1,...cats.map(c=>c.amount));
     let rings=cats.map(c=>{
-      const frac=c.amount/maxCat; const off=Math.round(138*(1-frac));
+      const frac=c.amount/maxCat; const roff=Math.round(138*(1-frac));
       const col=frac>0.85?'var(--red)':(frac>0.6?'var(--amber)':'var(--teal)');
       return '<div class="ring"><div style="position:relative;width:52px;height:52px;">'+
         '<svg viewBox="0 0 54 54" style="width:52px;height:52px;"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--border)" stroke-width="4.5"/>'+
-        '<circle cx="27" cy="27" r="22" fill="none" stroke="'+col+'" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="'+off+'" transform="rotate(-90 27 27)"/></svg>'+
+        '<circle cx="27" cy="27" r="22" fill="none" stroke="'+col+'" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="'+roff+'" transform="rotate(-90 27 27)"/></svg>'+
         '<i class="ti '+(CAT_ICON[c.category]||'ti-dots')+'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:17px;color:'+col+';"></i></div>'+
         '<p class="amt">'+money0(c.amount)+'</p><p class="st" style="color:var(--text2)">'+c.category.split('/')[0]+'</p></div>';
     }).join('');
     html+='<div class="seclabel">EXPENSES</div><div class="rings">'+rings+'</div>';
-  }else{
-    html+='<div class="seclabel">EXPENSES</div><div class="card"><p class="latest sub" style="text-align:center;margin:6px 0;">No expenses yet — tap + to add one</p></div>';
   }
 
-  // recent expenses mini-list (newest first, up to 4)
+  // recent expenses
   if(expenses && expenses.length){
     const recent=expenses.slice(0,4);
-    let rows=recent.map(e=>{
-      const ic=catIcon(e.category);
-      return '<div class="lrow" data-eid="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+ic+'</div>'+
-        '<div><p class="nm">'+(e.vendor||e.category)+'</p><p class="meta">'+(e.category||'')+' · '+shortDate(e.date)+'</p></div></div>'+
-        '<span class="amt">'+money0(e.amount)+'</span></div>';
-    }).join('');
+    let rows=recent.map(e=>'<div class="lrow" data-eid="'+e.id+'"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+catIcon(e.category)+'</div>'+
+      '<div><p class="nm">'+(e.vendor||e.category)+'</p><p class="meta">'+(e.category||'')+' · '+shortDate(e.date)+'</p></div></div>'+
+      '<span class="amt">'+money0(e.amount)+'</span></div>').join('');
     html+='<div class="seclabel">RECENT EXPENSES <span class="link" id="seeAllExp">See all ›</span></div><div class="list">'+rows+'</div>';
-  }
-
-  // best day milestone
-  if(real.length){
-    const best=real.reduce((a,b)=>b.totalSales>a.totalSales?b:a);
-    html+='<div class="seclabel">HIGHLIGHT</div>'+
-      '<div class="milestone"><div class="ic"><i class="ti ti-trophy"></i></div><div><p style="margin:0;font-size:13px;font-weight:500;">Best day this month</p>'+
-      '<p style="margin:2px 0 0;font-size:11px;color:var(--text2);">'+shortDate(best.date)+' hit '+money0(best.totalSales)+'</p></div></div>';
   }
 
   html+='<div style="height:20px;"></div>';
   el.innerHTML=html;
-  const openD=document.getElementById('openDepts'); if(openD) openD.onclick=()=>openDepartments();
-  // interactive sales line for the month (oldest -> newest)
-  const trendData=(d.trend||[]).map(t=>({date:t.date, value:t.sales, extra:null}));
-  const salesByDate={}; salesList.forEach(s=>{ if(!s.empty) salesByDate[s.date]=s; });
-  trendData.forEach(t=>{ const s=salesByDate[t.date]; if(s) t.extra=Math.round(s.customers)+' customers'; });
-  interactiveChart('homeChart', trendData, 'line', openSalesEntry);
-  // recent-expense interactions
+
+  // interactions
+  document.getElementById('goalHero').onclick=()=>editGoal(target);
   const seeAll=document.getElementById('seeAllExp'); if(seeAll) seeAll.onclick=()=>showTab('expenses');
   el.querySelectorAll('.lrow[data-eid]').forEach(r=> r.onclick=()=>{
     const item=(expenses||[]).find(x=>String(x.id)===r.dataset.eid); if(item) openExpenseEntry(item);
   });
+}
+function calcStreak(real){
+  // real is newest-first; count consecutive calendar days back from latest
+  if(!real.length) return 0;
+  const dates=real.map(s=>s.date).sort().reverse();
+  let streak=1;
+  for(let i=0;i<dates.length-1;i++){
+    const a=parseISO(dates[i]), b=parseISO(dates[i+1]);
+    const diff=Math.round((a-b)/86400000);
+    if(diff===1) streak++; else break;
+  }
+  return streak;
+}
+function bestWeek(real){
+  if(!real.length) return 0;
+  const byDate={}; real.forEach(s=>byDate[s.date]=s.totalSales);
+  const dates=Object.keys(byDate).sort();
+  let best=0;
+  for(let i=0;i<dates.length;i++){
+    const start=parseISO(dates[i]); let sum=0;
+    for(let j=0;j<7;j++){ const dd=new Date(start); dd.setDate(dd.getDate()+j); const k=fmt(dd); if(byDate[k]) sum+=byDate[k]; }
+    if(sum>best) best=sum;
+  }
+  return best;
+}
+async function editGoal(current){
+  const v=prompt('Set your sales goal ($):', current||180000);
+  if(v===null) return;
+  const g=parseFloat(String(v).replace(/[^0-9.]/g,''));
+  if(!g||g<=0){ toast('Enter a valid number'); return; }
+  try{ await api({action:'setGoal',goal:g}); wash('Goal updated','green'); loadHome(); }
+  catch(e){ toast(e.message); }
 }
 
 /* ========= SALES LIST ========= */
