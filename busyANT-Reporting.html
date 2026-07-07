@@ -35,9 +35,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--amber-bg);color:var(--amber);font-weight:600;
   font-size:12px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;flex:0 0 auto;}
-.tabbar{display:flex;gap:3px;background:var(--card);border-radius:999px;padding:4px;flex:0 1 auto;}
+.tabbar{display:flex;gap:3px;background:var(--card);border-radius:999px;padding:4px;flex:0 1 auto;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:100%;}
+.tabbar::-webkit-scrollbar{display:none;}
 .tabbar button{border:none;background:transparent;color:var(--text2);border-radius:999px;padding:6px 14px;
-  font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;flex:0 0 auto;}
 .tabbar button.on{background:var(--amber);color:var(--amber-t);font-weight:600;}
 
 /* hero */
@@ -294,8 +296,10 @@ details.more .field{background:transparent;padding:0;}
   <div class="topbar">
     <img src="logo-web.png" alt="busyANT" class="header-logo">
     <div class="tabbar">
-      <button data-tab="home" class="on">Home</button>
+      <button data-tab="home" class="on">Dashboard</button>
       <button data-tab="sales">Sales</button>
+      <button data-tab="departments">Departments</button>
+      <button data-tab="trends">Trends</button>
       <button data-tab="expenses">Expenses</button>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -306,6 +310,8 @@ details.more .field{background:transparent;padding:0;}
 
   <section id="view-home"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></section>
   <section id="view-sales" class="hide"></section>
+  <section id="view-departments" class="hide"></section>
+  <section id="view-trends" class="hide"></section>
   <section id="view-expenses" class="hide"></section>
 </div>
 
@@ -401,15 +407,6 @@ details.more .field{background:transparent;padding:0;}
   </div>
 </div>
 
-<div class="modal" id="deptModal">
-  <div class="sheet">
-    <div class="grab"></div>
-    <div class="sheet-head"><h3 id="deptTitle">Departments</h3><button class="closeX" id="dept_close" aria-label="Close">✕</button></div>
-    <div id="deptRanges"></div>
-    <div id="deptBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>
-
-  </div>
-</div>
 
 <div class="modal" id="stmtModal">
   <div class="sheet">
@@ -524,10 +521,12 @@ refreshWho();
 let activeTab='home';
 function showTab(tab){
   activeTab=tab;
-  ['home','sales','expenses'].forEach(t=>document.getElementById('view-'+t).classList.toggle('hide',t!==tab));
+  ['home','sales','departments','trends','expenses'].forEach(t=>document.getElementById('view-'+t).classList.toggle('hide',t!==tab));
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
   if(tab==='home') loadHome();
   if(tab==='sales') loadSalesList();
+  if(tab==='departments') loadDeptTab();
+  if(tab==='trends') loadTrends();
   if(tab==='expenses') loadExpenseList();
 }
 document.querySelectorAll('.tabbar button').forEach(b=> b.onclick=()=>showTab(b.dataset.tab));
@@ -664,16 +663,8 @@ function renderHome(d,salesList,expenses){
       '<p style="margin:2px 0 0;font-size:11px;color:var(--text2);">'+shortDate(best.date)+' hit '+money0(best.totalSales)+'</p></div></div>';
   }
 
-  // departments entry card
-  html+='<div class="seclabel">EXPLORE</div>'+
-    '<div class="card lrow" id="openDepts" style="cursor:pointer;">'+
-    '<div class="l"><div class="licon" style="background:var(--amber-bg);">🏬</div>'+
-    '<div><p class="nm">Departments</p><p class="meta">See what sells most</p></div></div>'+
-    '<span style="color:var(--text2);font-size:18px;">›</span></div>';
-
   html+='<div style="height:20px;"></div>';
   el.innerHTML=html;
-  // department view opener
   const openD=document.getElementById('openDepts'); if(openD) openD.onclick=()=>openDepartments();
   // interactive sales line for the month (oldest -> newest)
   const trendData=(d.trend||[]).map(t=>({date:t.date, value:t.sales, extra:null}));
@@ -805,20 +796,20 @@ function maybeReload(prefix){
   else { if(deptFrom&&deptTo){ if(deptFrom>deptTo){const x=deptFrom;deptFrom=deptTo;deptTo=x;} loadDepartments(); } }
 }
 
-/* ========= DEPARTMENTS VIEW ========= */
+/* ========= DEPARTMENTS TAB ========= */
 let deptRange='month', deptFrom=null, deptTo=null, deptData=null;
-function openDepartments(){ document.getElementById('deptModal').classList.add('show'); loadDepartments(); }
-document.getElementById('dept_close').onclick=()=>document.getElementById('deptModal').classList.remove('show');
+function loadDeptTab(){ loadDepartments(); }
+function openDepartments(){ showTab('departments'); } /* legacy callers -> switch to tab */
 async function loadDepartments(){
-  const body=document.getElementById('deptBody');
+  const el=document.getElementById('view-departments');
+  el.innerHTML='<div id="deptRanges"></div><div id="deptBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>';
   document.getElementById('deptRanges').innerHTML=buildRanges('deptRangesBar',deptRange)+(deptRange==='custom'?customRangeHtml('d',deptFrom,deptTo):'');
   wireRanges('deptRangesBar',m=>{ deptRange=m; loadDepartments(); },'d');
-  body.innerHTML='<div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div>';
   const [from,to]=rangeToDates(deptRange,deptFrom,deptTo);
   try{
     const r=await api({action:'getDepartments',from:from,to:to});
     deptData=r; renderDepartments(r);
-  }catch(err){ body.innerHTML='<div class="empty-state">'+err.message+'</div>'; }
+  }catch(err){ document.getElementById('deptBody').innerHTML='<div class="empty-state">'+err.message+'</div>'; }
 }
 function titleCase(s){ return String(s).toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
 function renderDepartments(r){
@@ -836,7 +827,7 @@ function renderDepartments(r){
   }).join('');
   body.innerHTML='<div style="text-align:center;margin:6px 0 16px;"><p style="margin:0;font-size:11px;color:var(--text2);">Total department sales</p>'+
     '<p style="margin:2px 0 0;font-size:24px;font-weight:600;">'+money0(r.total)+'</p></div>'+
-    rows+'<p style="margin:4px 0 0;font-size:11px;color:var(--text3);text-align:center;">Tap any department for its daily trend</p>';
+    rows+'<p style="margin:4px 0 0;font-size:11px;color:var(--text3);text-align:center;">Tap any department for its daily trend</p><div style="height:20px;"></div>';
   body.querySelectorAll('.deptrow').forEach(row=> row.onclick=()=>showDeptTrend(decodeURIComponent(row.dataset.dept)));
 }
 function showDeptTrend(name){
@@ -851,6 +842,94 @@ function showDeptTrend(name){
   document.getElementById('deptBack').onclick=()=>renderDepartments(deptData);
   const trend=d.daily.map(x=>({date:x.date,value:x.value,extra:null}));
   interactiveChart('deptTrendChart', trend, 'line', ()=>{});
+}
+
+/* ========= TRENDS TAB ========= */
+let trendsRange='month', trendsFrom=null, trendsTo=null;
+function loadTrends(){
+  const el=document.getElementById('view-trends');
+  el.innerHTML='<div id="trendsRanges"></div><div id="trendsBody"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></div>';
+  document.getElementById('trendsRanges').innerHTML=buildRanges('trendsRangesBar',trendsRange)+(trendsRange==='custom'?customRangeHtml('tr',trendsFrom,trendsTo):'');
+  const c=document.getElementById('trendsRangesBar');
+  c.querySelectorAll('.rchip').forEach(b=> b.onclick=()=>{ trendsRange=b.dataset.r; loadTrends(); });
+  const f=document.getElementById('trFrom'), t=document.getElementById('trTo');
+  if(f) f.onchange=()=>{ trendsFrom=f.value; if(trendsFrom&&trendsTo) loadTrends(); };
+  if(t) t.onchange=()=>{ trendsTo=t.value; if(trendsFrom&&trendsTo) loadTrends(); };
+  fetchTrends();
+}
+async function fetchTrends(){
+  const body=document.getElementById('trendsBody');
+  const [from,to]=rangeToDates(trendsRange,trendsFrom,trendsTo);
+  try{
+    const [salesR, dash] = await Promise.all([
+      api({action:'listSales',from:from,to:to}),
+      api({action:'getDashboard',from:from,to:to})
+    ]);
+    // month-over-month: also fetch previous period of same length
+    const prev = await api({action:'getDashboard', from: shiftMonth(from,-1), to: shiftMonth(to,-1) }).catch(()=>null);
+    renderTrends(salesR.sales||[], dash, prev);
+  }catch(err){ body.innerHTML='<div class="empty-state">'+err.message+'</div>'; }
+}
+function shiftMonth(iso,delta){ const d=parseISO(iso); return fmt(new Date(d.getFullYear(),d.getMonth()+delta,d.getDate())); }
+function renderTrends(sales, dash, prev){
+  const body=document.getElementById('trendsBody');
+  const real=sales.filter(s=>!s.empty);
+  let html='';
+
+  // 1. Day-of-week averages
+  const dow=[[],[],[],[],[],[],[]]; // Mon..Sun
+  real.forEach(s=>{ const idx=(parseISO(s.date).getDay()+6)%7; dow[idx].push(s.totalSales); });
+  const dowAvg=dow.map(arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0);
+  const dowMax=Math.max(1,...dowAvg);
+  const dowNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let bars=dowAvg.map((v,i)=>{
+    const h=Math.round(v/dowMax*90);
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+      '<div style="font-size:9px;color:var(--text2);">'+(v>0?money0(v):'')+'</div>'+
+      '<div style="width:70%;height:'+Math.max(2,h)+'px;background:var(--amber);border-radius:4px 4px 0 0;"></div>'+
+      '<div style="font-size:10px;color:var(--text2);">'+dowNames[i]+'</div></div>';
+  }).join('');
+  html+='<div class="seclabel">AVERAGE SALES BY DAY</div>'+
+    '<div class="card"><div style="display:flex;align-items:flex-end;gap:4px;height:130px;">'+bars+'</div></div>';
+  // busiest/slowest callout
+  if(real.length){
+    const bi=dowAvg.indexOf(Math.max(...dowAvg)), si=dowAvg.indexOf(Math.min(...dowAvg.filter(v=>v>0)));
+    html+='<p style="margin:8px 4px 0;font-size:11px;color:var(--text2);">Busiest: '+dowNames[bi]+' ('+money0(dowAvg[bi])+' avg)'+(dowAvg[si]>0?' · Slowest: '+dowNames[si]+' ('+money0(dowAvg[si])+' avg)':'')+'</p>';
+  }
+
+  // 2. Month-over-month
+  html+='<div class="seclabel">VS PREVIOUS PERIOD</div>';
+  if(prev){
+    const rows=[['Sales',dash.totalSales,prev.totalSales,true],['Customers',dash.customers,prev.customers,false],
+      ['Avg sale',dash.customers?dash.totalSales/dash.customers:0,prev.customers?prev.totalSales/prev.customers:0,true],
+      ['Profit',dash.netProfit,prev.netProfit,true]];
+    let mrows=rows.map(([label,now,was,money])=>{
+      const pct = was? Math.round((now-was)/Math.abs(was)*100) : 0;
+      const up = now>=was;
+      const val = money? money0(now) : Math.round(now).toLocaleString();
+      return '<div class="lrow" style="cursor:default;"><div class="l"><div><p class="nm">'+label+'</p>'+
+        '<p class="meta">was '+(money?money0(was):Math.round(was).toLocaleString())+'</p></div></div>'+
+        '<div style="text-align:right;"><p style="margin:0;font-size:14px;font-weight:600;">'+val+'</p>'+
+        '<p style="margin:0;font-size:11px;color:'+(up?'var(--teal)':'var(--red)')+';">'+(up?'▲ ':'▼ ')+Math.abs(pct)+'%</p></div></div>';
+    }).join('');
+    html+='<div class="list">'+mrows+'</div>';
+  }else{
+    html+='<div class="card"><p class="latest sub" style="text-align:center;margin:6px 0;">Not enough history yet for comparison</p></div>';
+  }
+
+  // 3. Sales vs expenses over time (using dashboard daily series if present)
+  html+='<div class="seclabel">SALES VS EXPENSES</div><div class="card">'+
+    '<div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:10px;">'+
+    '<div><p style="margin:0;font-size:11px;color:var(--text2);">Sales</p><p style="margin:2px 0 0;font-size:18px;font-weight:600;color:var(--teal);">'+money0(dash.totalSales)+'</p></div>'+
+    '<div><p style="margin:0;font-size:11px;color:var(--text2);">Expenses</p><p style="margin:2px 0 0;font-size:18px;font-weight:600;color:var(--red);">'+money0(dash.totalExpenses||0)+'</p></div>'+
+    '<div><p style="margin:0;font-size:11px;color:var(--text2);">Profit</p><p style="margin:2px 0 0;font-size:18px;font-weight:600;color:var(--amber);">'+money0(dash.netProfit)+'</p></div>'+
+    '</div><div id="svExpChart"></div></div><div style="height:20px;"></div>';
+
+  body.innerHTML=html;
+
+  // sales-vs-expenses chart: daily sales line
+  const trend=(dash.trend||[]).map(t=>({date:t.date,value:t.sales,extra:null}));
+  if(trend.length) interactiveChart('svExpChart', trend, 'line', ()=>{});
 }
 
 /* ========= FAB + ADD CHOOSER ========= */
