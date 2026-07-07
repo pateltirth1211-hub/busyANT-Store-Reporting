@@ -874,15 +874,58 @@ function renderExpenseList(list){
   const el=document.getElementById('view-expenses');
   const total=list.reduce((s,e)=>s+e.amount,0);
   let head=buildRanges('expRanges',expRange)+(expRange==='custom'?customRangeHtml('e',expFrom,expTo):'');
-  head+='<div class="rtotal"><p class="k">Total expenses</p><p class="v">'+money0(total)+'</p><p class="d">'+list.length+' entries</p></div>';
+
+  if(list.length){
+    // aggregates
+    const byCat={}, byVendor={};
+    list.forEach(e=>{ const c=e.category||'Misc'; byCat[c]=(byCat[c]||0)+e.amount;
+      const v=(e.vendor||'').trim()||'(no vendor)'; if(!byVendor[v]) byVendor[v]={amount:0,count:0,cat:e.category}; byVendor[v].amount+=e.amount; byVendor[v].count++; });
+    const cats=Object.keys(byCat).map(c=>({name:c,amount:byCat[c]})).sort((a,b)=>b.amount-a.amount);
+    const vendors=Object.keys(byVendor).map(v=>({name:v,...byVendor[v]})).sort((a,b)=>b.amount-a.amount);
+    const biggest=list.reduce((a,b)=>b.amount>a.amount?b:a);
+
+    // hero
+    head+='<div class="card" style="text-align:center;margin-bottom:14px;">'+
+      '<p style="margin:0;font-size:11px;color:var(--text2);">Total spent</p>'+
+      '<p style="margin:2px 0 2px;font-size:28px;font-weight:600;">'+money0(total)+'</p>'+
+      '<p style="margin:0 0 12px;font-size:11px;color:var(--text2);">'+list.length+' expenses · top: '+(cats[0]?cats[0].name.split('/')[0]:'—')+'</p>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'+
+      '<div style="background:var(--card2);border-radius:10px;padding:9px 6px;"><p style="margin:0;font-size:9px;color:var(--text2);">Biggest</p><p style="margin:2px 0 0;font-size:13px;font-weight:600;">'+money0(biggest.amount)+'</p><p style="margin:0;font-size:8px;color:var(--text2);">'+((biggest.category||'').split('/')[0])+'</p></div>'+
+      '<div style="background:var(--card2);border-radius:10px;padding:9px 6px;"><p style="margin:0;font-size:9px;color:var(--text2);">Avg</p><p style="margin:2px 0 0;font-size:13px;font-weight:600;">'+money0(total/list.length)+'</p><p style="margin:0;font-size:8px;color:var(--text2);">per expense</p></div>'+
+      '<div style="background:var(--card2);border-radius:10px;padding:9px 6px;"><p style="margin:0;font-size:9px;color:var(--text2);">Vendors</p><p style="margin:2px 0 0;font-size:13px;font-weight:600;">'+vendors.length+'</p><p style="margin:0;font-size:8px;color:var(--text2);">paid</p></div>'+
+      '</div></div>';
+
+    // insight line
+    if(cats.length){ const topPct=Math.round(cats[0].amount/total*100);
+      head+='<p style="margin:0 4px 12px;font-size:12px;color:var(--text2);"><i class="ti ti-bulb" style="vertical-align:-2px;color:var(--amber);"></i> '+cats[0].name.split('/')[0]+' is '+topPct+'% of your spending'+(topPct>=45?' — your largest cost by far.':'.')+'</p>'; }
+
+    // category bars (top 6)
+    const catMax=cats[0].amount;
+    let catBars=cats.slice(0,6).map(c=>{
+      const pct=Math.round(c.amount/catMax*100), sharePct=Math.round(c.amount/total*100);
+      return '<div style="margin-bottom:11px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;">'+
+        '<span style="font-size:12px;color:var(--text);">'+catIcon(c.name)+' '+c.name.split('/')[0]+'</span>'+
+        '<span style="font-size:12px;font-weight:600;color:var(--text);">'+money0(c.amount)+' <span style="color:var(--text2);font-weight:400;font-size:10px;">'+sharePct+'%</span></span></div>'+
+        '<div style="height:7px;background:var(--card2);border-radius:999px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:var(--amber);"></div></div></div>';
+    }).join('');
+    head+='<div class="seclabel">WHERE IT GOES</div><div class="card">'+catBars+'</div>';
+
+    // top vendors (top 5)
+    let venRows=vendors.slice(0,5).map(v=>
+      '<div class="lrow" style="cursor:default;"><div class="l"><div class="licon" style="background:var(--amber-bg);">'+catIcon(v.cat)+'</div>'+
+      '<div><p class="nm">'+v.name+'</p><p class="meta">'+((v.cat||'').split('/')[0])+' · '+v.count+' payment'+(v.count>1?'s':'')+'</p></div></div>'+
+      '<span class="amt">'+money0(v.amount)+'</span></div>').join('');
+    head+='<div class="seclabel">TOP VENDORS</div><div class="list">'+venRows+'</div>';
+  }else{
+    head+='<div class="card" style="text-align:center;padding:20px;"><p style="margin:0;font-size:13px;color:var(--text2);">No expenses in this range</p><p style="margin:6px 0 0;font-size:11px;color:var(--text3);">Tap + to add one, or scan a receipt</p></div>';
+  }
+
   head+='<div class="searchbar"><i class="ti ti-search"></i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
-  el.innerHTML=head+'<div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
+  el.innerHTML=head+'<div class="seclabel">ALL EXPENSES</div><div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
   wireRanges('expRanges',m=>{ expRange=m; loadExpenseList(); },'e');
-  // interactive daily-spend bars: sum expenses per day, oldest->newest
   const byDay={}; list.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+e.amount; });
   const barData=Object.keys(byDay).sort().map(dt=>({date:dt,value:byDay[dt],extra:null}));
-  interactiveChart('expChart', barData, 'bar', dt=>{
-    // open the first expense of that day for editing
+  if(barData.length) interactiveChart('expChart', barData, 'bar', dt=>{
     const first=expCache.filter(x=>x.date===dt)[0]; if(first) openExpenseEntry(first);
   });
   const si=document.getElementById('expSearchInput');
