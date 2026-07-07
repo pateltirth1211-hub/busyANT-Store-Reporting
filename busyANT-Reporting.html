@@ -653,6 +653,8 @@ function renderHome(d,salesList,expenses){
   el.innerHTML=html;
   // department view opener
   const openD=document.getElementById('openDepts'); if(openD) openD.onclick=()=>openDepartments();
+  // interactive sales line for the month (oldest -> newest)
+  const trendData=(d.trend||[]).map(t=>({date:t.date, value:t.sales, extra:null}));
   const salesByDate={}; salesList.forEach(s=>{ if(!s.empty) salesByDate[s.date]=s; });
   trendData.forEach(t=>{ const s=salesByDate[t.date]; if(s) t.extra=Math.round(s.customers)+' customers'; });
   interactiveChart('homeChart', trendData, 'line', openSalesEntry);
