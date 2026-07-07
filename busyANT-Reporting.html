@@ -920,8 +920,8 @@ function renderExpenseList(list){
     head+='<div class="card" style="text-align:center;padding:20px;"><p style="margin:0;font-size:13px;color:var(--text2);">No expenses in this range</p><p style="margin:6px 0 0;font-size:11px;color:var(--text3);">Tap + to add one, or scan a receipt</p></div>';
   }
 
-  head+='<div class="searchbar"><i class="ti ti-search"></i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
-  el.innerHTML=head+'<div class="seclabel">ALL EXPENSES</div><div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
+  head+='<div class="seclabel">ALL EXPENSES</div><div class="searchbar"><i class="ti ti-search"></i><input id="expSearchInput" placeholder="Search vendor or category" value="'+expSearch+'"></div>';
+  el.innerHTML=head+'<div id="expChart"></div><div id="expRows"></div><div style="height:20px;"></div>';
   wireRanges('expRanges',m=>{ expRange=m; loadExpenseList(); },'e');
   const byDay={}; list.forEach(e=>{ byDay[e.date]=(byDay[e.date]||0)+e.amount; });
   const barData=Object.keys(byDay).sort().map(dt=>({date:dt,value:byDay[dt],extra:null}));
