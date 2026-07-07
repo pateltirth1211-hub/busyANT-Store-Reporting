@@ -31,6 +31,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 
 /* top bar with tabs */
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;}
+
+/* Copilot-style header: icon / logo / avatar row, then scrollable tabs */
+.topbar-c{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 2px 12px;}
+.header-logo-c{height:30px;width:auto;}
+.tabbar-c{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  padding:0 40%;margin-bottom:16px;scroll-behavior:smooth;}
+.tabbar-c::-webkit-scrollbar{display:none;}
+.tabbar-c button{border:none;background:transparent;color:var(--text3);font-size:16px;font-weight:500;
+  cursor:pointer;font-family:inherit;white-space:nowrap;flex:0 0 auto;padding:7px 16px;border-radius:999px;
+  transition:color .15s,background .15s;}
+.tabbar-c button.on{background:var(--card);color:var(--text);}
 .iconbtn{width:34px;height:34px;border-radius:10px;border:none;background:var(--card);color:var(--text2);
   cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--amber-bg);color:var(--amber);font-weight:600;
@@ -293,19 +304,17 @@ details.more .field{background:transparent;padding:0;}
 </div>
 
 <div class="wrap">
-  <div class="topbar">
-    <img src="logo-web.png" alt="busyANT" class="header-logo">
-    <div class="tabbar">
-      <button data-tab="home" class="on">Dashboard</button>
-      <button data-tab="sales">Sales</button>
-      <button data-tab="departments">Departments</button>
-      <button data-tab="trends">Trends</button>
-      <button data-tab="expenses">Expenses</button>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button class="iconbtn" id="themeBtn" aria-label="Toggle theme"><i>☾</i></button>
-      <button class="avatar" id="whoBtn" aria-label="Who are you">?</button>
-    </div>
+  <div class="topbar-c">
+    <button class="iconbtn" id="themeBtn" aria-label="Toggle theme"><i>☾</i></button>
+    <img src="logo-web.png" alt="busyANT" class="header-logo-c">
+    <button class="avatar" id="whoBtn" aria-label="Who are you">?</button>
+  </div>
+  <div class="tabbar-c" id="tabbar">
+    <button data-tab="home" class="on">Dashboard</button>
+    <button data-tab="sales">Sales</button>
+    <button data-tab="departments">Departments</button>
+    <button data-tab="trends">Trends</button>
+    <button data-tab="expenses">Expenses</button>
   </div>
 
   <section id="view-home"><div class="loadwrap"><img src="logo-web.png" alt="" class="load-logo"><span class="spinner-lg"></span><span class="m">Loading…</span></div></section>
@@ -522,14 +531,20 @@ let activeTab='home';
 function showTab(tab){
   activeTab=tab;
   ['home','sales','departments','trends','expenses'].forEach(t=>document.getElementById('view-'+t).classList.toggle('hide',t!==tab));
-  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  document.querySelectorAll('.tabbar-c button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  centerActiveTab(tab);
   if(tab==='home') loadHome();
   if(tab==='sales') loadSalesList();
   if(tab==='departments') loadDeptTab();
   if(tab==='trends') loadTrends();
   if(tab==='expenses') loadExpenseList();
 }
-document.querySelectorAll('.tabbar button').forEach(b=> b.onclick=()=>showTab(b.dataset.tab));
+function centerActiveTab(tab){
+  const bar=document.getElementById('tabbar');
+  const btn=bar&&bar.querySelector('button[data-tab="'+tab+'"]');
+  if(btn){ const target=btn.offsetLeft-(bar.clientWidth/2)+(btn.offsetWidth/2); bar.scrollTo({left:target,behavior:'smooth'}); }
+}
+document.querySelectorAll('.tabbar-c button').forEach(b=> b.onclick=()=>showTab(b.dataset.tab));
 
 /* ========= INTERACTIVE CHART ENGINE ========= */
 /* data = [{date, value, extra}], type='line'|'bar', onOpen(date) */
@@ -1238,7 +1253,7 @@ document.getElementById('loginUser').addEventListener('keydown',e=>{ if(e.key===
 
 /* ========= INIT ========= */
 function hideSplash(){ const s=document.getElementById('splash'); if(s){ s.classList.add('gone'); setTimeout(()=>s.remove(),450); } }
-function startApp(){ loadHome().finally(()=>setTimeout(hideSplash,300)); }
+function startApp(){ setTimeout(()=>centerActiveTab('home'),100); loadHome().finally(()=>setTimeout(hideSplash,300)); }
 async function boot(){
   if(API_URL.indexOf('PASTE_')===0){ document.getElementById('view-home').innerHTML='<div class="empty-state">Set API_URL first</div>'; hideSplash(); return; }
   if(!authToken){ showLogin(); return; }
